@@ -116,28 +116,33 @@ export class FintsNode implements INodeType {
 
 		const results = [];
 		for (const account of accounts) {
-			// For ING, use getStatements, extract most recent balance
-			const statements = await client.statements(
-				account,
-				new Date(Date.now() - 14 * 24 * 60 * 60 * 1000), // Last 14 days
-			);
+			try {
+				const statements = await client.statements(
+					account,
+					new Date(Date.now() - 14 * 24 * 60 * 60 * 1000), // Last 14 days
+				);
 
-			let balance = null;
-			let currency = null;
+				let balance = null;
+				let currency = null;
 
-			if (statements && statements.length > 0) {
-				const latest = statements[0];
-				balance = (latest.closingBalance && latest.closingBalance.value) || null;
+				if (statements && statements.length > 0) {
+					const latest = statements[0];
+					balance = (latest.closingBalance && latest.closingBalance.value) || null;
 
-				currency = (latest.closingBalance && latest.closingBalance.currency) || null;
+					currency = (latest.closingBalance && latest.closingBalance.currency) || null;
+				}
+
+				results.push({
+					account: account.iban || account.accountNumber || null,
+					bank: blz,
+					balance,
+					currency,
+				});
+			} catch (e) {
+				// We can not get the balance for this account.
+				// This is not an error, but we can not do anything about it.
+				// We just ignore it and continue with the next account.
 			}
-
-			results.push({
-				account: account.iban || account.accountNumber || null,
-				bank: blz,
-				balance,
-				currency,
-			});
 		}
 
 		return [this.helpers.returnJsonArray(results)];
