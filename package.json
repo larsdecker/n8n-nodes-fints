@@ -1,19 +1,19 @@
 {
   "name": "n8n-nodes-fints",
   "version": "0.1.0",
-  "description": "",
+  "description": "FinTS Node - Access and fetch balance information from German bank accounts via FinTS/HBCI protocol",
   "keywords": [
     "n8n-community-node-package"
   ],
   "license": "MIT",
   "homepage": "",
   "author": {
-    "name": "",
-    "email": ""
+    "name": "Lars Decker",
+    "email": "info@lars-decker.eu"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/<...>/n8n-nodes-<...>.git"
+    "url": "https://github.com/larsdecker/n8n-nodes-fints.git"
   },
   "engines": {
     "node": ">=20.15"
@@ -25,7 +25,7 @@
     "format": "prettier nodes credentials --write",
     "lint": "eslint nodes credentials package.json",
     "lintfix": "eslint nodes credentials package.json --fix",
-    "prepublishOnly": "npm build && npm lint -c .eslintrc.prepublish.js nodes credentials package.json"
+    "prepublishOnly": "npm run build && npm run lint -c .eslintrc.prepublish.js nodes credentials package.json"
   },
   "files": [
     "dist"
@@ -40,7 +40,6 @@
     ]
   },
   "devDependencies": {
-    "@types/node": "^22.15.23",
     "@typescript-eslint/parser": "~8.32.0",
     "eslint": "^8.57.0",
     "eslint-plugin-n8n-nodes-base": "^1.16.3",
@@ -49,10 +48,7 @@
     "typescript": "^5.8.2"
   },
   "peerDependencies": {
-    "lib-fints": "^1.1.1",
-    "n8n-workflow": "*"
-  },
-  "dependencies": {
-    "fints": "^0.5.0"
+    "n8n-workflow": "*",
+    "fints": "0.5.0"
   }
 }

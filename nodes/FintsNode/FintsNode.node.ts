@@ -109,48 +109,37 @@ export class FintsNode implements INodeType {
 			blz,
 		});
 
-		try {
-			const accounts = await client.accounts();
-			if (!accounts || accounts.length === 0) {
-				throw new Error('No accounts found.');
-			}
-
-			const results = [];
-			for (const account of accounts) {
-				// For ING, use getStatements, extract most recent balance
-				const statements = await client.statements(
-					account,
-					new Date(Date.now() - 14 * 24 * 60 * 60 * 1000), // Last 14 days
-				);
-
-				let balance = null;
-				let currency = null;
-
-				if (statements && statements.length > 0) {
-					const latest = statements[0];
-					balance = (latest.closingBalance && latest.closingBalance.value) || null;
-
-					currency = (latest.closingBalance && latest.closingBalance.currency) || null;
-				}
-
-				results.push({
-					account: account.iban || account.accountNumber || null,
-					balance,
-					currency,
-					bank: blz,
-					bankUrl: fintsUrl,
-				});
-			}
-
-			return [this.helpers.returnJsonArray(results)];
-		} catch (error: Error | any) {
-			if (typeof error.message === 'string' && error.message.toLowerCase().includes('tan')) {
-				throw new NodeOperationError(
-					this.getNode(),
-					'TAN required! Please confirm in the banking app and restart the workflow.',
-				);
-			}
-			throw new NodeOperationError(this.getNode(), error);
+		const accounts = await client.accounts();
+		if (!accounts || accounts.length === 0) {
+			throw new NodeOperationError(this.getNode(), 'No Accounts found');
 		}
+
+		const results = [];
+		for (const account of accounts) {
+			// For ING, use getStatements, extract most recent balance
+			const statements = await client.statements(
+				account,
+				new Date(Date.now() - 14 * 24 * 60 * 60 * 1000), // Last 14 days
+			);
+
+			let balance = null;
+			let currency = null;
+
+			if (statements && statements.length > 0) {
+				const latest = statements[0];
+				balance = (latest.closingBalance && latest.closingBalance.value) || null;
+
+				currency = (latest.closingBalance && latest.closingBalance.currency) || null;
+			}
+
+			results.push({
+				account: account.iban || account.accountNumber || null,
+				bank: blz,
+				balance,
+				currency,
+			});
+		}
+
+		return [this.helpers.returnJsonArray(results)];
 	}
 }
