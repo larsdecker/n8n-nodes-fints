@@ -33,8 +33,11 @@ export class FintsNode implements INodeType {
 				name: 'bank',
 				type: 'options',
 				options: [
-					{ name: 'ING', value: 'ING' },
+					{ name: 'Comdirect', value: 'Comdirect' },
+					{ name: 'Commerzbank', value: 'Commerzbank' },
 					{ name: 'DKB', value: 'DKB' },
+					{ name: 'ING', value: 'ING' },
+					{ name: 'Volksbanken', value: 'Volksbanken' },
 					// Add more banks as needed
 				],
 				default: 'ING',
@@ -92,6 +95,18 @@ export class FintsNode implements INodeType {
 				case 'DKB':
 					blz = '12030000';
 					fintsUrl = 'https://banking-dkb.s-fints-pt-dkb.de/fints30';
+					break;
+				case 'Commerzbank':
+					blz = '10040000';
+					fintsUrl = 'https://fints.commerzbank.de/fints';
+					break;
+				case 'Comdirect':
+					blz = '20041155';
+					fintsUrl = 'https://fints.comdirect.de/fints';
+					break;
+				case 'Volksbanken':
+					blz = '76090000';
+					fintsUrl = 'https://fints.vr.de/fints';
 					break;
 				// Add more banks as needed
 				default:
