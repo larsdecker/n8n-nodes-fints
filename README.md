@@ -60,4 +60,5 @@ Once you have these details, create new credentials in n8n under **Settings → 
 
 ## Version history
 
+- **0.2.0** (2025-05-29): Add a few more banks.
 - **0.1.4** (2025-05-29): Initial release with Get Account Balance operation.
