@@ -1,5 +1,5 @@
 {
-  "name": "n8n-nodes-<...>",
+  "name": "n8n-nodes-fints",
   "version": "0.1.0",
   "description": "",
   "keywords": [
@@ -33,15 +33,14 @@
   "n8n": {
     "n8nNodesApiVersion": 1,
     "credentials": [
-      "dist/credentials/ExampleCredentialsApi.credentials.js",
-      "dist/credentials/HttpBinApi.credentials.js"
+      "dist/credentials/FintsApi.credentials.ts"
     ],
     "nodes": [
-      "dist/nodes/ExampleNode/ExampleNode.node.js",
-      "dist/nodes/HttpBin/HttpBin.node.js"
+      "dist/nodes/Fints.node.ts"
     ]
   },
   "devDependencies": {
+    "@types/node": "^22.15.23",
     "@typescript-eslint/parser": "~8.32.0",
     "eslint": "^8.57.0",
     "eslint-plugin-n8n-nodes-base": "^1.16.3",
@@ -50,6 +49,10 @@
     "typescript": "^5.8.2"
   },
   "peerDependencies": {
+    "lib-fints": "^1.1.1",
     "n8n-workflow": "*"
+  },
+  "dependencies": {
+    "fints": "^0.5.0"
   }
 }
