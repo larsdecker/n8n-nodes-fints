@@ -59,6 +59,6 @@ Once you have these details, create new credentials in n8n under **Settings → 
 * [German Banking API documentation](https://www.banking-api.de)
 
 ## Version history
-- **0.3.0** (2025-05-29): Include the 20 biggest German banks.
+- **0.3.0** (2025-06-02): Include the 20 biggest German banks.
 - **0.2.0** (2025-05-29): Add a few more banks.
 - **0.1.4** (2025-05-29): Initial release with Get Account Balance operation.
