@@ -74,20 +74,36 @@ export class FintsNode implements INodeType {
 					},
 				},
 			},
-			{
-				displayName: 'FinTS Server URL',
-				name: 'fintsUrl',
-				type: 'string',
-				default: '',
-				displayOptions: {
-					show: {
-						expertMode: [true],
-					},
-				},
-			},
-		],
-		version: 1,
-	};
+                        {
+                                displayName: 'FinTS Server URL',
+                                name: 'fintsUrl',
+                                type: 'string',
+                                default: '',
+                                displayOptions: {
+                                        show: {
+                                                expertMode: [true],
+                                        },
+                                },
+                        },
+                        {
+                                displayName: 'Start Date',
+                                name: 'startDate',
+                                type: 'dateTime',
+                                default: '',
+                                description:
+                                        'Fetch statements starting from this date. Defaults to 14 days ago.',
+                        },
+                        {
+                                displayName: 'End Date',
+                                name: 'endDate',
+                                type: 'dateTime',
+                                default: '',
+                                description:
+                                        'Fetch statements up to this date. Defaults to today.',
+                        },
+                ],
+                version: 1,
+        };
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const credentials = await this.getCredentials('fintsApi');
@@ -95,12 +111,12 @@ export class FintsNode implements INodeType {
 		let blz: string;
 		let fintsUrl: string;
 
-		const expertMode = this.getNodeParameter('expertMode', 0) as boolean;
+                const expertMode = this.getNodeParameter('expertMode', 0) as boolean;
 
-		if (expertMode) {
-			blz = this.getNodeParameter('blz', 0) as string;
-			fintsUrl = this.getNodeParameter('fintsUrl', 0) as string;
-		} else {
+                if (expertMode) {
+                        blz = this.getNodeParameter('blz', 0) as string;
+                        fintsUrl = this.getNodeParameter('fintsUrl', 0) as string;
+                } else {
 			const bank = this.getNodeParameter('bank', 0) as string;
 			switch (bank) {
 				case 'ING':
@@ -188,8 +204,16 @@ export class FintsNode implements INodeType {
 			}
 		}
 
-		const userId = credentials.userId as string;
-		const pin = credentials.pin as string;
+                const startDateStr = this.getNodeParameter('startDate', 0, '') as string;
+                const endDateStr = this.getNodeParameter('endDate', 0, '') as string;
+
+                const startDate = startDateStr
+                        ? new Date(startDateStr)
+                        : new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+                const endDate = endDateStr ? new Date(endDateStr) : new Date();
+
+                const userId = credentials.userId as string;
+                const pin = credentials.pin as string;
 
 		const client = new PinTanClient({
 			url: fintsUrl,
@@ -203,32 +227,42 @@ export class FintsNode implements INodeType {
 			throw new NodeOperationError(this.getNode(), 'No Accounts found');
 		}
 
-		const results = [];
-		for (const account of accounts) {
-			try {
-				const statements = await client.statements(
-					account,
-					new Date(Date.now() - 14 * 24 * 60 * 60 * 1000), // Last 14 days
-				);
+                const results = [] as Array<{
+                        account: string | null;
+                        bank: string;
+                        balance: number | null;
+                        currency: string | null;
+                        transactions: Array<any>;
+                }>;
+                for (const account of accounts) {
+                        try {
+                                const statements = await client.statements(
+                                        account,
+                                        startDate,
+                                        endDate,
+                                );
 
-				let balance = null;
-				let currency = null;
+                                let balance = null;
+                                let currency = null;
+                                let transactions: Array<any> = [];
 
-				if (statements && statements.length > 0) {
-					const latest = statements[0];
-					balance = (latest.closingBalance && latest.closingBalance.value) || null;
+                                if (statements && statements.length > 0) {
+                                        const latest = statements[0];
+                                        balance = (latest.closingBalance && latest.closingBalance.value) || null;
 
-					currency = (latest.closingBalance && latest.closingBalance.currency) || null;
-				}
+                                        currency = (latest.closingBalance && latest.closingBalance.currency) || null;
+                                        transactions = statements.flatMap((s) => s.transactions || []);
+                                }
 
-				results.push({
-					account: account.iban || account.accountNumber || null,
-					bank: blz,
-					balance,
-					currency,
-				});
-			} catch (e) {
-				// We can not get the balance for this account.
+                                results.push({
+                                        account: account.iban || account.accountNumber || null,
+                                        bank: blz,
+                                        balance,
+                                        currency,
+                                        transactions,
+                                });
+                        } catch (e) {
+                                // We can not get the balance for this account.
 				// This is not an error, but we can not do anything about it.
 				// We just ignore it and continue with the next account.
 			}
