@@ -44,18 +44,21 @@ Once you have these details, create new credentials in n8n under **Settings → 
 
 ```json
 [
-        {
-                "account": "DEXXXXXXXXXX",
-                "bank": "23445561",
-                "balance": 10001,
-                "currency": "EUR",
-                "transactions": [
-                        {
-                                "amount": -20,
-                                "description": "Some payment"
-                        }
-                ]
-        }
+	{
+		"account": "DEXXXXXXXXXX",
+		"bank": "23445561",
+		"balance": 10001,
+		"currency": "EUR",
+		"transactions": [
+			{
+				"amount": 20,
+				"text": "Some payment",
+				"valueDate": "2025-06-03",
+				"currency": "EUR",
+				"reference": "XYZ"
+			}
+		]
+	}
 ]
 ```
 
@@ -66,6 +69,7 @@ Once you have these details, create new credentials in n8n under **Settings → 
 * [German Banking API documentation](https://www.banking-api.de)
 
 ## Version history
+- **0.4.0** (2025-06-04): Include the Transactions into the response.
 - **0.3.0** (2025-06-02): Include the 20 biggest German banks.
 - **0.2.0** (2025-05-29): Add a few more banks.
 - **0.1.4** (2025-05-29): Initial release with Get Account Balance operation.
