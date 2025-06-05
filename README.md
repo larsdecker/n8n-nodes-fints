@@ -36,7 +36,7 @@ Once you have these details, create new credentials in n8n under **Settings → 
 1. **Add** the **FinTS** node to your workflow.
 2. **Select** the FinTS credentials you created.
 3. **Choose** the operation: **Get Account Balance**.
-4. **Configure** the parameters by selecting the desired account or providing the account number.
+4. **Configure** the parameters. The node automatically retrieves all accounts linked to your login.
 5. **Optionally**, set **Start Date** and **End Date** to limit the booking range. If left empty, the node fetches statements from the last 14 days up to today.
 6. **Execute** the workflow to receive a response object containing `balance`,`currency`, `bank`, `account`, and an array of `transactions`.
 
