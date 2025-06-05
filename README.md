@@ -69,6 +69,7 @@ Once you have these details, create new credentials in n8n under **Settings → 
 * [German Banking API documentation](https://www.banking-api.de)
 
 ## Version history
+- **0.5.3** (2025-06-05): Modernize eslint
 - **0.5.2** (2025-06-05): Improved Error Handling.
 - **0.5.1** (2025-06-05): Bugfix for wrong transactions amount.
 - **0.5.0** (2025-06-05): Enhance the transactions response.
