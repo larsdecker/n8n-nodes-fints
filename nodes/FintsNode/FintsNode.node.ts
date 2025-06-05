@@ -253,7 +253,7 @@ export class FintsNode implements INodeType {
 
 						return {
 							currency: t.currency,
-							amount: t.isExpense ? -t.amount : t.amount,
+							amount: t.isCredit ? t.amount : -t.amount,
 							valueDate: t.valueDate,
 							text,
 							reference: t.bankReference,
