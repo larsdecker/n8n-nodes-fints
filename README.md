@@ -19,12 +19,10 @@ npm install n8n-nodes-fints
 ## Credentials
 
 To authenticate with your bank's FinTS server, you need:
-- **Bank Code (BLZ)**: Your bank's 8-digit identifier.
-- **Account Number**: The specific account number you wish to query.
 - **User ID / Login**: Your customer identification number.
 - **PIN**: Your Personal Identification Number.
-- **FinTS Server URL**: The endpoint provided by your bank for FinTS access.
-- **TAN Mode** (optional): The transport method for TAN (e.g., SMS, pushTAN).
+
+The Bank Code (BLZ) and FinTS server URL are set via the node parameters or by choosing your bank during credential setup.
 
 Once you have these details, create new credentials in n8n under **Settings → API Credentials**, select **FinTS**, and enter the above information.
 
