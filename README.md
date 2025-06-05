@@ -55,7 +55,9 @@ Once you have these details, create new credentials in n8n under **Settings → 
 				"text": "Some payment",
 				"valueDate": "2025-06-03",
 				"currency": "EUR",
-				"reference": "XYZ"
+				"reference": "XYZ",
+				"isCredit": true,
+				"isExpense": false
 			}
 		]
 	}
@@ -69,6 +71,7 @@ Once you have these details, create new credentials in n8n under **Settings → 
 * [German Banking API documentation](https://www.banking-api.de)
 
 ## Version history
+- **0.5.0** (2025-06-05): Enhance the transactions response.
 - **0.4.0** (2025-06-04): Include the Transactions into the response.
 - **0.3.0** (2025-06-02): Include the 20 biggest German banks.
 - **0.2.0** (2025-05-29): Add a few more banks.
