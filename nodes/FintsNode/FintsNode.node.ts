@@ -271,9 +271,13 @@ export class FintsNode implements INodeType {
 					transactions,
 				});
 			} catch (e) {
-				// We can not get the balance for this account.
-				// This is not an error, but we can not do anything about it.
-				// We just ignore it and continue with the next account.
+				// Could not get the balance for this account.
+				// This is normal for some account types (e.g. securities/stock depots),
+				// since those accounts do not provide a balance via FinTS.
+				// Continue processing the remaining accounts.
+				if (this.logger) {
+					this.logger.warn((e as Error).message);
+				}
 			}
 		}
 
