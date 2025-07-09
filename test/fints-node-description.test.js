@@ -10,5 +10,5 @@ test('FintsNode has correct description properties', () => {
   assert.ok(cred, 'fintsApi credentials missing');
   const bankProp = node.description.properties.find(p => p.name === 'bank');
   assert.ok(bankProp, 'bank property missing');
-  assert.equal(bankProp.options.length, 20, 'should expose 20 bank options');
+  assert.equal(bankProp.options.length, 22, 'should expose 22 bank options');
 });
