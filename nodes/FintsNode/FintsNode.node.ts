@@ -51,7 +51,9 @@ export class FintsNode implements INodeType {
 					{ name: 'NordLB', value: 'NordLB' },
 					{ name: 'NRW Bank', value: 'NRW Bank' },
 					{ name: 'Postbank', value: 'Postbank' },
+					{ name: 'PSD Bank', value: 'PSD Bank' },
 					{ name: 'Santander', value: 'Santander' },
+					{ name: 'Sparda Bank', value: 'Sparda Bank' },
 					{ name: 'Targobank', value: 'Targobank' },
 					{ name: 'Volksbanken', value: 'Volksbanken' },
 				],
@@ -185,9 +187,17 @@ export class FintsNode implements INodeType {
 					blz = '10010010';
 					fintsUrl = 'https://fints.postbank.de/fints';
 					break;
+				case 'PSD Bank':
+					blz = '76060055';
+					fintsUrl = 'https://fints.psd.de/fints';
+					break;
 				case 'Santander':
 					blz = '50033300';
 					fintsUrl = 'https://fints.santander.de/fints';
+					break;
+				case 'Sparda Bank':
+					blz = '37060590';
+					fintsUrl = 'https://fints.sparda-west.de/fints';
 					break;
 				case 'Targobank':
 					blz = '30020900';
