@@ -69,6 +69,7 @@ Once you have these details, create new credentials in n8n under **Settings → 
 * [German Banking API documentation](https://www.banking-api.de)
 
 ## Version history
+- **0.7.0** (2025-07-19): Optional FinTS registration number can now be configured.
 - **0.6.0** (2025-07-05): Added Sparda and PSD Bank
 - **0.5.4** (2025-07-05): Dependency Update
 - **0.5.3** (2025-06-05): Modernize eslint
