@@ -8,7 +8,7 @@ import {
 } from 'n8n-workflow';
 
 // Use the 'fints' package (npm install fints)
-import { PinTanClient } from 'fints';
+import { PinTanClient, PinTanClientConfig } from 'fints';
 
 export class FintsNode implements INodeType {
 	description: INodeTypeDescription = {
@@ -79,6 +79,17 @@ export class FintsNode implements INodeType {
 			{
 				displayName: 'FinTS Server URL',
 				name: 'fintsUrl',
+				type: 'string',
+				default: '',
+				displayOptions: {
+					show: {
+						expertMode: [true],
+					},
+				},
+			},
+			{
+				displayName: 'FinTS Registration Number',
+				name: 'fintsProductId',
 				type: 'string',
 				default: '',
 				displayOptions: {
@@ -215,6 +226,8 @@ export class FintsNode implements INodeType {
 		const startDateStr = this.getNodeParameter('startDate', 0, '') as string;
 		const endDateStr = this.getNodeParameter('endDate', 0, '') as string;
 
+		let fintsProductId = this.getNodeParameter('fintsProductId', 0) as string;
+
 		const startDate = startDateStr
 			? new Date(startDateStr)
 			: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
@@ -223,12 +236,18 @@ export class FintsNode implements INodeType {
 		const userId = credentials.userId as string;
 		const pin = credentials.pin as string;
 
-		const client = new PinTanClient({
+		const configPinTanClient: PinTanClientConfig = {
 			url: fintsUrl,
 			name: userId,
 			pin,
 			blz,
-		});
+		};
+
+		if (fintsProductId.length > 0) {
+			configPinTanClient.productId = fintsProductId;
+		}
+
+		const client = new PinTanClient(configPinTanClient);
 
 		const accounts = await client.accounts();
 		if (!accounts || accounts.length === 0) {
