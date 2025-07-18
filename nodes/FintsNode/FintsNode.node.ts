@@ -56,6 +56,7 @@ export class FintsNode implements INodeType {
 					{ name: 'Sparda Bank', value: 'Sparda Bank' },
 					{ name: 'Targobank', value: 'Targobank' },
 					{ name: 'Volksbanken', value: 'Volksbanken' },
+					{ name: 'Berliner Sparkasse', value: 'Berliner Sparkasse' },
 				],
 				type: 'options',
 			},
