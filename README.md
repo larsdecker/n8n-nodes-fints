@@ -65,8 +65,7 @@ Once you have these details, create new credentials in n8n under **Settings → 
 ## Resources
 
 * [n8n community nodes documentation](https://docs.n8n.io/integrations/#community-nodes)
-* [FinTS specification overview](https://www.fints.org/fints-3-2-1)
-* [German Banking API documentation](https://www.banking-api.de)
+* [FinTS specification overview](https://www.fints.org/)
 
 ## Version history
 - **0.7.0** (2025-07-19): Optional FinTS registration number can now be configured.
