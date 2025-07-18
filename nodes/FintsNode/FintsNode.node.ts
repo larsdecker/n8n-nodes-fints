@@ -215,6 +215,9 @@ export class FintsNode implements INodeType {
 					blz = '76030080';
 					fintsUrl = 'https://fints.consorsbank.de/fints';
 					break;
+				case 'Berliner Sparkasse':
+					blz = '10050000';
+					fintsUrl = 'https://banking-be3.s-fints-pt-be.de/fints30';
 				default:
 					throw new NodeOperationError(this.getNode(), `Unknown bank: ${bank}`);
 			}
