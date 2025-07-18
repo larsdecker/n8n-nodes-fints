@@ -92,11 +92,8 @@ export class FintsNode implements INodeType {
 				name: 'fintsProductId',
 				type: 'string',
 				default: '',
-				displayOptions: {
-					show: {
-						expertMode: [true],
-					},
-				},
+				description:
+					'The FinTS Product ID to use. Whether this field is required depends on the bank. Please try leaving it empty at first. If you receive an error with code 9050, the bank requires registration for usage.',
 			},
 			{
 				displayName: 'Start Date',
