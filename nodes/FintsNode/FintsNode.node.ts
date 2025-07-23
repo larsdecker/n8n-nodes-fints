@@ -9,6 +9,16 @@ import {
 
 // Use the 'fints' package (npm install fints)
 import { PinTanClient, PinTanClientConfig } from 'fints';
+import banks from './banks.json';
+
+const bankOptions = banks.map((b) => ({ name: b.displayName, value: b.value }));
+const bankMap: Record<string, { blz: string; fintsUrl: string }> = banks.reduce(
+	(acc, b) => {
+		acc[b.value] = { blz: b.blz, fintsUrl: b.fintsUrl };
+		return acc;
+	},
+	{} as Record<string, { blz: string; fintsUrl: string }>,
+);
 
 export class FintsNode implements INodeType {
 	description: INodeTypeDescription = {
@@ -33,30 +43,7 @@ export class FintsNode implements INodeType {
 				default: 'ING',
 				description: 'Select your bank. BLZ and FinTS URL will be set automatically.',
 				name: 'bank',
-				options: [
-					{ name: 'BayernLB', value: 'BayernLB' },
-					{ name: 'Comdirect', value: 'Comdirect' },
-					{ name: 'Commerzbank', value: 'Commerzbank' },
-					{ name: 'Consorsbank', value: 'Consorsbank' },
-					{ name: 'Deutsche Apotheker- Und Ärztebank', value: 'Apobank' },
-					{ name: 'Deutsche Bank', value: 'Deutsche Bank' },
-					{ name: 'DKB', value: 'DKB' },
-					{ name: 'DZ Bank', value: 'DZ Bank' },
-					{ name: 'Helaba', value: 'Helaba' },
-					{ name: 'HypoVereinsbank', value: 'HypoVereinsbank' },
-					{ name: 'ING', value: 'ING' },
-					{ name: 'KfW', value: 'KfW' },
-					{ name: 'Landesbank Berlin', value: 'Landesbank Berlin' },
-					{ name: 'LBBW', value: 'LBBW' },
-					{ name: 'NordLB', value: 'NordLB' },
-					{ name: 'NRW Bank', value: 'NRW Bank' },
-					{ name: 'Postbank', value: 'Postbank' },
-					{ name: 'PSD Bank', value: 'PSD Bank' },
-					{ name: 'Santander', value: 'Santander' },
-					{ name: 'Sparda Bank', value: 'Sparda Bank' },
-					{ name: 'Targobank', value: 'Targobank' },
-					{ name: 'Volksbanken', value: 'Volksbanken' },
-				],
+				options: bankOptions,
 				type: 'options',
 			},
 			{
@@ -126,98 +113,12 @@ export class FintsNode implements INodeType {
 			fintsUrl = this.getNodeParameter('fintsUrl', 0) as string;
 		} else {
 			const bank = this.getNodeParameter('bank', 0) as string;
-			switch (bank) {
-				case 'ING':
-					blz = '50010517';
-					fintsUrl = 'https://fints.ing.de/fints';
-					break;
-				case 'DKB':
-					blz = '12030000';
-					fintsUrl = 'https://banking-dkb.s-fints-pt-dkb.de/fints30';
-					break;
-				case 'Commerzbank':
-					blz = '10040000';
-					fintsUrl = 'https://fints.commerzbank.de/fints';
-					break;
-				case 'Comdirect':
-					blz = '20041155';
-					fintsUrl = 'https://fints.comdirect.de/fints';
-					break;
-				case 'Volksbanken':
-					blz = '76090000';
-					fintsUrl = 'https://fints.vr.de/fints';
-					break;
-				case 'Deutsche Bank':
-					blz = '50070010';
-					fintsUrl = 'https://fints.deutsche-bank.de/fints';
-					break;
-				case 'DZ Bank':
-					blz = '50060400';
-					fintsUrl = 'https://fints.dzbank.de/fints';
-					break;
-				case 'KfW':
-					blz = '50020400';
-					fintsUrl = 'https://fints.kfw.de/fints';
-					break;
-				case 'HypoVereinsbank':
-					blz = '70020270';
-					fintsUrl = 'https://fints.hypovereinsbank.de/fints';
-					break;
-				case 'LBBW':
-					blz = '60050101';
-					fintsUrl = 'https://fints.lbbw.de/fints';
-					break;
-				case 'BayernLB':
-					blz = '70050000';
-					fintsUrl = 'https://fints.bayernlb.de/fints';
-					break;
-				case 'Helaba':
-					blz = '50050200';
-					fintsUrl = 'https://fints.helaba.de/fints';
-					break;
-				case 'NordLB':
-					blz = '25050000';
-					fintsUrl = 'https://fints.nordlb.de/fints';
-					break;
-				case 'Landesbank Berlin':
-					blz = '10050000';
-					fintsUrl = 'https://fints.lbb.de/fints';
-					break;
-				case 'NRW Bank':
-					blz = '37050000';
-					fintsUrl = 'https://fints.nrwbank.de/fints';
-					break;
-				case 'Apobank':
-					blz = '30060601';
-					fintsUrl = 'https://fints.apobank.de/fints';
-					break;
-				case 'Postbank':
-					blz = '10010010';
-					fintsUrl = 'https://fints.postbank.de/fints';
-					break;
-				case 'PSD Bank':
-					blz = '76060055';
-					fintsUrl = 'https://fints.psd.de/fints';
-					break;
-				case 'Santander':
-					blz = '50033300';
-					fintsUrl = 'https://fints.santander.de/fints';
-					break;
-				case 'Sparda Bank':
-					blz = '37060590';
-					fintsUrl = 'https://fints.sparda-west.de/fints';
-					break;
-				case 'Targobank':
-					blz = '30020900';
-					fintsUrl = 'https://fints.targobank.de/fints';
-					break;
-				case 'Consorsbank':
-					blz = '76030080';
-					fintsUrl = 'https://fints.consorsbank.de/fints';
-					break;
-				default:
-					throw new NodeOperationError(this.getNode(), `Unknown bank: ${bank}`);
+			const entry = bankMap[bank];
+			if (!entry) {
+				throw new NodeOperationError(this.getNode(), `Unknown bank: ${bank}`);
 			}
+			blz = entry.blz;
+			fintsUrl = entry.fintsUrl;
 		}
 
 		const startDateStr = this.getNodeParameter('startDate', 0, '') as string;
