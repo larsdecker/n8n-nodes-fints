@@ -69,6 +69,7 @@ Once you have these details, create new credentials in n8n under **Settings → 
 * [FinTS specification overview](https://www.fints.org/)
 
 ## Version history
+- **0.8.0** (2025-07-25): Externalize the bank configuration to a separate file and add more banks to it.
 - **0.7.0** (2025-07-19): Optional FinTS registration number can now be configured.
 - **0.6.0** (2025-07-05): Added Sparda and PSD Bank
 - **0.5.4** (2025-07-05): Dependency Update
