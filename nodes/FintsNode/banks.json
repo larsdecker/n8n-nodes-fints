@@ -1,0 +1,134 @@
+[
+	{
+		"value": "BayernLB",
+		"displayName": "BayernLB",
+		"blz": "70050000",
+		"fintsUrl": "https://fints.bayernlb.de/fints"
+	},
+	{
+		"value": "Comdirect",
+		"displayName": "Comdirect",
+		"blz": "20041155",
+		"fintsUrl": "https://fints.comdirect.de/fints"
+	},
+	{
+		"value": "Commerzbank",
+		"displayName": "Commerzbank",
+		"blz": "10040000",
+		"fintsUrl": "https://fints.commerzbank.de/fints"
+	},
+	{
+		"value": "Consorsbank",
+		"displayName": "Consorsbank",
+		"blz": "76030080",
+		"fintsUrl": "https://fints.consorsbank.de/fints"
+	},
+	{
+		"value": "Apobank",
+		"displayName": "Deutsche Apotheker- Und Ärztebank",
+		"blz": "30060601",
+		"fintsUrl": "https://fints.apobank.de/fints"
+	},
+	{
+		"value": "Deutsche Bank",
+		"displayName": "Deutsche Bank",
+		"blz": "50070010",
+		"fintsUrl": "https://fints.deutsche-bank.de/fints"
+	},
+	{
+		"value": "DKB",
+		"displayName": "DKB",
+		"blz": "12030000",
+		"fintsUrl": "https://banking-dkb.s-fints-pt-dkb.de/fints30"
+	},
+	{
+		"value": "DZ Bank",
+		"displayName": "DZ Bank",
+		"blz": "50060400",
+		"fintsUrl": "https://fints.dzbank.de/fints"
+	},
+	{
+		"value": "Helaba",
+		"displayName": "Helaba",
+		"blz": "50050200",
+		"fintsUrl": "https://fints.helaba.de/fints"
+	},
+	{
+		"value": "HypoVereinsbank",
+		"displayName": "HypoVereinsbank",
+		"blz": "70020270",
+		"fintsUrl": "https://fints.hypovereinsbank.de/fints"
+	},
+	{
+		"value": "ING",
+		"displayName": "ING",
+		"blz": "50010517",
+		"fintsUrl": "https://fints.ing.de/fints"
+	},
+	{
+		"value": "KfW",
+		"displayName": "KfW",
+		"blz": "50020400",
+		"fintsUrl": "https://fints.kfw.de/fints"
+	},
+	{
+		"value": "Landesbank Berlin",
+		"displayName": "Landesbank Berlin",
+		"blz": "10050000",
+		"fintsUrl": "https://fints.lbb.de/fints"
+	},
+	{
+		"value": "LBBW",
+		"displayName": "LBBW",
+		"blz": "60050101",
+		"fintsUrl": "https://fints.lbbw.de/fints"
+	},
+	{
+		"value": "NordLB",
+		"displayName": "NordLB",
+		"blz": "25050000",
+		"fintsUrl": "https://fints.nordlb.de/fints"
+	},
+	{
+		"value": "NRW Bank",
+		"displayName": "NRW Bank",
+		"blz": "37050000",
+		"fintsUrl": "https://fints.nrwbank.de/fints"
+	},
+	{
+		"value": "Postbank",
+		"displayName": "Postbank",
+		"blz": "10010010",
+		"fintsUrl": "https://fints.postbank.de/fints"
+	},
+	{
+		"value": "PSD Bank",
+		"displayName": "PSD Bank",
+		"blz": "76060055",
+		"fintsUrl": "https://fints.psd.de/fints"
+	},
+	{
+		"value": "Santander",
+		"displayName": "Santander",
+		"blz": "50033300",
+		"fintsUrl": "https://fints.santander.de/fints"
+	},
+	{
+		"value": "Sparda Bank",
+		"displayName": "Sparda Bank",
+		"blz": "37060590",
+		"fintsUrl": "https://fints.sparda-west.de/fints"
+	},
+	{
+		"value": "Targobank",
+		"displayName": "Targobank",
+		"blz": "30020900",
+		"fintsUrl": "https://fints.targobank.de/fints"
+	},
+	{
+		"value": "Volksbanken",
+		"displayName": "Volksbanken",
+		"blz": "76090000",
+		"fintsUrl": "https://fints.vr.de/fints"
+	}
+]

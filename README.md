@@ -23,6 +23,7 @@ To authenticate with your bank's FinTS server, you need:
 - **PIN**: Your Personal Identification Number.
 
 The Bank Code (BLZ) and FinTS server URL are set via the node parameters or by choosing your bank during credential setup.
+The available banks are defined in `nodes/FintsNode/banks.json`. To support additional institutions, add an entry with `value`, `displayName`, `blz`, and `fintsUrl` to this file and rebuild the project.
 
 Once you have these details, create new credentials in n8n under **Settings → API Credentials**, select **FinTS**, and enter the above information.
 
