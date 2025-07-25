@@ -19,11 +19,18 @@ npm install n8n-nodes-fints
 ## Credentials
 
 To authenticate with your bank's FinTS server, you need:
+
 - **User ID / Login**: Your customer identification number.
 - **PIN**: Your Personal Identification Number.
 
 The Bank Code (BLZ) and FinTS server URL are set via the node parameters or by choosing your bank during credential setup.
-The available banks are defined in `nodes/FintsNode/banks.json`. To support additional institutions, add an entry with `value`, `displayName`, `blz`, and `fintsUrl` to this file and rebuild the project.
+The available banks are defined in `nodes/FintsNode/banks.json`. To support additional institutions, add an entry with `value`, `displayName`, `blz`, and `fintsUrl` to this file and rebuild the project. A helper script `scripts/update-banks.js` can convert a semicolon-separated CSV into `banks.json`:
+
+```bash
+node scripts/update-banks.js banks.csv
+```
+
+The CSV must contain the columns `displayName`, `fintsUrl`, and `blz` in that order.
 
 Once you have these details, create new credentials in n8n under **Settings → API Credentials**, select **FinTS**, and enter the above information.
 
@@ -65,10 +72,11 @@ Once you have these details, create new credentials in n8n under **Settings → 
 
 ## Resources
 
-* [n8n community nodes documentation](https://docs.n8n.io/integrations/#community-nodes)
-* [FinTS specification overview](https://www.fints.org/)
+- [n8n community nodes documentation](https://docs.n8n.io/integrations/#community-nodes)
+- [FinTS specification overview](https://www.fints.org/)
 
 ## Version history
+
 - **0.7.0** (2025-07-19): Optional FinTS registration number can now be configured.
 - **0.6.0** (2025-07-05): Added Sparda and PSD Bank
 - **0.5.4** (2025-07-05): Dependency Update
