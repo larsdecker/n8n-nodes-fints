@@ -33,6 +33,7 @@ export class FintsNode implements INodeType {
 		},
 		description: 'Retrieves the account balance for all accounts via FinTS/HBCI',
 		displayName: 'FinTS Account Balance',
+		icon: 'file:fintsNodeLogo.svg',
 		group: ['transform'],
 		inputs: [NodeConnectionType.Main],
 		name: 'fintsNode',
