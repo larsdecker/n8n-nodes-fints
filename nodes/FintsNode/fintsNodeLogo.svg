@@ -1,29 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 200 200">
 	<!-- Rahmen -->
-	<rect x="10" y="10" width="120" height="120" rx="12" ry="12" fill="none" stroke="#000" stroke-width="8"/>
+	<rect x="10" y="10" width="120" height="120" rx="12" ry="12" fill="none" stroke="#007BFF" stroke-width="8"/>
 
 	<!-- Bankgebäude: Dach -->
-	<polygon points="20,50 70,20 120,50" fill="#000"/>
+	<polygon points="20,50 70,20 120,50" fill="#007BFF"/>
 
 	<!-- Säulen -->
-	<rect x="40" y="55" width="10" height="50" fill="#000"/>
-	<rect x="65" y="55" width="10" height="50" fill="#000"/>
-	<rect x="90" y="55" width="10" height="50" fill="#000"/>
+	<rect x="40" y="55" width="10" height="50" fill="#007BFF"/>
+	<rect x="65" y="55" width="10" height="50" fill="#007BFF"/>
+	<rect x="90" y="55" width="10" height="50" fill="#007BFF"/>
 
 	<!-- Basis -->
-	<rect x="20" y="105" width="100" height="10" fill="#000"/>
+	<rect x="20" y="105" width="100" height="10" fill="#007BFF"/>
 
 	<!-- Daten-Pfeil -->
-	<path d="M150,60 L150,100 L140,100 L160,120 L180,100 L170,100 L170,60 Z" fill="#000"/>
+	<path d="M150,60 L150,100 L140,100 L160,120 L180,100 L170,100 L170,60 Z" fill="#007BFF"/>
 
 	<!-- Daten-Linien -->
-	<rect x="140" y="130" width="50" height="8" rx="4" ry="4" fill="#000"/>
-	<rect x="140" y="150" width="40" height="8" rx="4" ry="4" fill="#000"/>
-	<rect x="140" y="170" width="30" height="8" rx="4" ry="4" fill="#000"/>
+	<rect x="140" y="130" width="50" height="8" rx="4" ry="4" fill="#007BFF"/>
+	<rect x="140" y="150" width="40" height="8" rx="4" ry="4" fill="#007BFF"/>
+	<rect x="140" y="170" width="30" height="8" rx="4" ry="4" fill="#007BFF"/>
 
 
 	<!-- Schriftzug FinTS -->
-	<text x="20" y="185" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#000">
+	<text x="20" y="185" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#007BFF">
 		FinTS
 	</text>
 </svg>
