@@ -10,7 +10,7 @@ import type {
         PostReceiveAction,
         PreSendAction,
 } from 'n8n-workflow';
-import { NodeConnectionType, NodeOperationError } from 'n8n-workflow';
+import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
 // Use the 'fints' package (npm install fints)
 import { PinTanClient } from 'fints';
@@ -284,9 +284,9 @@ export class FintsNode implements INodeType {
 		displayName: 'FinTS Account Balance',
 		icon: 'file:fintsNodeLogo.svg',
 		group: ['transform'],
-		inputs: [NodeConnectionType.Main],
+                inputs: [NodeConnectionTypes.Main],
 		name: 'fintsNode',
-		outputs: [NodeConnectionType.Main],
+                outputs: [NodeConnectionTypes.Main],
                 properties: [
                         {
                                 displayName: 'Resource',
