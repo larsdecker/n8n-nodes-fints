@@ -68,6 +68,10 @@ Once you have these details, create new credentials in n8n under **Settings → 
 * [n8n community nodes documentation](https://docs.n8n.io/integrations/#community-nodes)
 * [FinTS specification overview](https://www.fints.org/)
 
+## Automated releases
+
+Publishing from CI requires an npm automation token stored as the `NPM_TOKEN` repository secret. Generate the token in the npm account settings, ensure it has automation scope, and add it under **Settings → Secrets and variables → Actions** before pushing release commits or tags. The GitHub Actions workflow validates that the secret is present and aborts with a descriptive error if it is missing.
+
 ## Version history
 - **0.8.0** (2025-07-25): Externalize the bank configuration to a separate file and add more banks to it.
 - **0.7.0** (2025-07-19): Optional FinTS registration number can now be configured.
