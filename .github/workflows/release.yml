@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Publish package
+    runs-on: ubuntu-latest
+    concurrency: release-${{ github.ref }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - run: npm ci
+      - name: Detect package version change
+        id: version-check
+        if: github.ref == 'refs/heads/main'
+        run: |
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            PREV_VERSION=$(git show HEAD^:package.json | jq -r '.version')
+          else
+            PREV_VERSION=""
+          fi
+          CUR_VERSION=$(jq -r '.version' package.json)
+          if [ "$PREV_VERSION" = "$CUR_VERSION" ]; then
+            echo "Package version has not changed on main."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Package version changed from $PREV_VERSION to $CUR_VERSION."
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - run: npm test
+        if: github.ref != 'refs/heads/main' || steps.version-check.outputs.changed == 'true'
+      - run: npm run lint
+        if: github.ref != 'refs/heads/main' || steps.version-check.outputs.changed == 'true'
+      - name: Publish to npm
+        if: github.ref != 'refs/heads/main' || steps.version-check.outputs.changed == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
