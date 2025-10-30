@@ -45,6 +45,15 @@ jobs:
         if: github.ref != 'refs/heads/main' || steps.version-check.outputs.changed == 'true'
       - run: npm run lint
         if: github.ref != 'refs/heads/main' || steps.version-check.outputs.changed == 'true'
+      - name: Verify npm token secret
+        if: github.ref != 'refs/heads/main' || steps.version-check.outputs.changed == 'true'
+        env:
+          HAS_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
+        run: |
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "::error::The NPM_TOKEN secret is not configured. Add an npm automation token as the NPM_TOKEN repository secret before running this workflow."
+            exit 1
+          fi
       - name: Publish to npm
         if: github.ref != 'refs/heads/main' || steps.version-check.outputs.changed == 'true'
         env:
