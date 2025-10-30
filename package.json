@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-fints",
-  "version": "0.8.4",
+  "version": "0.8.5",
   "description": "FinTS Node - Access and fetch balance information from German bank accounts via FinTS/HBCI protocol",
   "keywords": [
     "n8n-community-node-package"
