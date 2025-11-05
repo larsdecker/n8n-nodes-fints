@@ -96,7 +96,11 @@ const runAccountStatementRequest: NonNullable<IN8nRequestOperations['pagination'
 		const accounts = await client.accounts();
 
 		if (!accounts.length) {
-			throw new NodeOperationError(this.getNode(), 'No accounts found', { itemIndex });
+			throw new NodeOperationError(
+				this.getNode(),
+				'No accounts found for the provided credentials. Please verify your User ID, PIN, and bank configuration.',
+				{ itemIndex },
+			);
 		}
 
 		const summaries = await collectAccountSummaries(this, client, accounts, metadata);
@@ -169,6 +173,22 @@ function resolveBankConfiguration(
 			);
 		}
 
+		// Validate BLZ format (should be 8 digits)
+		if (!/^\d{8}$/.test(blz)) {
+			throw new NodeOperationError(context.getNode(), 'BLZ must be exactly 8 digits.', {
+				itemIndex,
+			});
+		}
+
+		// Validate FinTS URL format
+		if (!fintsUrl.startsWith('https://') && !fintsUrl.startsWith('http://')) {
+			throw new NodeOperationError(
+				context.getNode(),
+				'FinTS URL must start with http:// or https://.',
+				{ itemIndex },
+			);
+		}
+
 		return { blz, fintsUrl };
 	}
 
@@ -176,7 +196,11 @@ function resolveBankConfiguration(
 	const configuration = bankMap[bank];
 
 	if (!configuration) {
-		throw new NodeOperationError(context.getNode(), `Unknown bank: ${bank}`, { itemIndex });
+		throw new NodeOperationError(
+			context.getNode(),
+			`Unknown bank: ${bank}. Please select a valid bank from the list or use expert mode.`,
+			{ itemIndex },
+		);
 	}
 
 	return configuration;
@@ -263,8 +287,9 @@ async function collectAccountSummaries(
 			const statements = await client.statements(account, metadata.startDate, metadata.endDate);
 			summaries.push(toAccountSummary(account, statements, metadata.bankCode));
 		} catch (error) {
+			const accountId = account.iban || account.accountNumber || 'unknown';
 			const message = error instanceof Error ? error.message : String(error);
-			context.logger.warn(message);
+			context.logger.warn(`Failed to fetch statements for account ${accountId}: ${message}`);
 		}
 	}
 
