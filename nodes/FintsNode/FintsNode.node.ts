@@ -23,7 +23,10 @@ import type {
 } from 'fints';
 import banks from './banks.json';
 
+// Build dropdown options from banks.json for the UI
 const bankOptions = banks.map((b) => ({ name: b.displayName, value: b.value }));
+
+// Create a lookup map for quick access to bank configuration by bank identifier
 const bankMap: Record<string, { blz: string; fintsUrl: string }> = banks.reduce(
 	(acc, b) => {
 		acc[b.value] = { blz: b.blz, fintsUrl: b.fintsUrl };
@@ -32,6 +35,7 @@ const bankMap: Record<string, { blz: string; fintsUrl: string }> = banks.reduce(
 	{} as Record<string, { blz: string; fintsUrl: string }>,
 );
 
+// Default period for fetching statements when no date range is specified
 const DEFAULT_LOOKBACK_DAYS = 14;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -308,6 +312,7 @@ function toAccountSummary(
 	statements: Statement[],
 	bankCode: string,
 ): AccountSummary {
+	// Use the most recent statement for balance information
 	const latest = statements[0];
 	const balance = latest?.closingBalance?.value ?? null;
 	const currency = latest?.closingBalance?.currency ?? null;
