@@ -39,6 +39,9 @@ const bankMap: Record<string, { blz: string; fintsUrl: string }> = banks.reduce(
 const DEFAULT_LOOKBACK_DAYS = 14;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
+// Bank code (BLZ) must be exactly 8 digits
+const BLZ_PATTERN = /^\d{8}$/;
+
 type BankConfiguration = { blz: string; fintsUrl: string };
 
 interface TransactionSummary extends IDataObject {
@@ -178,17 +181,18 @@ function resolveBankConfiguration(
 		}
 
 		// Validate BLZ format (should be 8 digits)
-		if (!/^\d{8}$/.test(blz)) {
+		if (!BLZ_PATTERN.test(blz)) {
 			throw new NodeOperationError(context.getNode(), 'BLZ must be exactly 8 digits.', {
 				itemIndex,
 			});
 		}
 
-		// Validate FinTS URL format
-		if (!fintsUrl.startsWith('https://') && !fintsUrl.startsWith('http://')) {
+		// Validate FinTS URL format - must be a valid URL with protocol
+		const urlPattern = /^https?:\/\/.+/i;
+		if (!urlPattern.test(fintsUrl)) {
 			throw new NodeOperationError(
 				context.getNode(),
-				'FinTS URL must start with http:// or https://.',
+				'FinTS URL must be a valid URL starting with http:// or https://.',
 				{ itemIndex },
 			);
 		}
