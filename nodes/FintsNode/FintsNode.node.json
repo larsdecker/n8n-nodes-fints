@@ -1,24 +1,24 @@
 {
-        "node": "n8n-nodes-fints.fintsNode",
-        "nodeVersion": "1.0",
-        "codexVersion": "1.0",
-        "categories": ["Finance & Accounting"],
-        "resources": {
-                "credentialDocumentation": [
-                        {
-                                "url": "https://github.com/larsdecker/n8n-nodes-fints/blob/master/README.md#credentials"
-                        }
-                ],
-                "primaryDocumentation": [
-                        {
-                                "url": "https://github.com/larsdecker/n8n-nodes-fints/blob/master/README.md"
-                        }
-                ],
-                "generic": [
-                        {
-                                "label": "FinTS specification overview",
-                                "url": "https://www.fints.org/"
-                        }
-                ]
-        }
+	"node": "n8n-nodes-fints.fintsNode",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": ["Finance & Accounting"],
+	"resources": {
+		"credentialDocumentation": [
+			{
+				"url": "https://github.com/larsdecker/n8n-nodes-fints/blob/master/README.md#credentials"
+			}
+		],
+		"primaryDocumentation": [
+			{
+				"url": "https://github.com/larsdecker/n8n-nodes-fints/blob/master/README.md"
+			}
+		],
+		"generic": [
+			{
+				"label": "FinTS specification overview",
+				"url": "https://www.fints.org/"
+			}
+		]
+	}
 }
