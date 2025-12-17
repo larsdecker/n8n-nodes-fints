@@ -166,7 +166,7 @@ function resolveBankConfiguration(
 	context: IExecuteSingleFunctions,
 	itemIndex: number,
 ): BankConfiguration {
-	const expertMode = context.getNodeParameter('expertMode', false) as boolean;
+	const expertMode = context.getNodeParameter('expertMode', false) === true;
 
 	if (expertMode) {
 		const blz = (context.getNodeParameter('blz', '') as string).trim();
