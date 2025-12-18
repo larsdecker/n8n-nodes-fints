@@ -79,7 +79,7 @@ async function buildFintsRequestMetadata(
 	const credentials = await context.getCredentials<FintsCredentialData>('fintsApi', itemIndex);
 	const { blz, fintsUrl } = resolveBankConfiguration(context, itemIndex);
 	const fintsProductId = (
-		context.getNodeParameter('fintsProductId', itemIndex, '') as string
+		(context.getNodeParameter('fintsProductId', itemIndex) as string) || ''
 	).trim();
 
 	const config: PinTanClientConfig = {
@@ -115,11 +115,11 @@ function resolveBankConfiguration(
 	context: IExecuteFunctions,
 	itemIndex: number,
 ): BankConfiguration {
-	const expertMode = context.getNodeParameter('expertMode', itemIndex, false) === true;
+	const expertMode = context.getNodeParameter('expertMode', itemIndex) === true;
 
 	if (expertMode) {
-		const blz = (context.getNodeParameter('blz', itemIndex, '') as string).trim();
-		const fintsUrl = (context.getNodeParameter('fintsUrl', itemIndex, '') as string).trim();
+		const blz = ((context.getNodeParameter('blz', itemIndex) as string) || '').trim();
+		const fintsUrl = ((context.getNodeParameter('fintsUrl', itemIndex) as string) || '').trim();
 
 		if (blz === '' || fintsUrl === '') {
 			throw new NodeOperationError(
@@ -172,8 +172,8 @@ function resolveBankConfiguration(
  * @throws NodeOperationError if start date is after end date
  */
 function resolveDateRange(context: IExecuteFunctions, itemIndex: number) {
-	const startDateValue = context.getNodeParameter('startDate', itemIndex, '') as string;
-	const endDateValue = context.getNodeParameter('endDate', itemIndex, '') as string;
+	const startDateValue = (context.getNodeParameter('startDate', itemIndex) as string) || '';
+	const endDateValue = (context.getNodeParameter('endDate', itemIndex) as string) || '';
 
 	const endDate =
 		endDateValue !== ''
@@ -487,7 +487,7 @@ export class FintsNode implements INodeType {
 				}
 
 				const summaries = await collectAccountSummaries(this, client, accounts, metadata);
-				returnData.push(...summaries.map((summary) => ({ json: summary })));
+				returnData.push(...this.helpers.returnJsonArray(summaries));
 			} catch (error) {
 				if (error instanceof NodeOperationError) {
 					throw error;

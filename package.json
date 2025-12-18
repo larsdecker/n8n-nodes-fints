@@ -32,7 +32,7 @@
     "dist"
   ],
   "n8n": {
-    "n8nNodesApiVersion": 1,
+    "n8nNodesApiVersion": 2,
     "credentials": [
       "dist/credentials/FintsApi.credentials.js"
     ],
@@ -52,6 +52,6 @@
     "fints": "0.5.0"
   },
   "peerDependencies": {
-    "n8n-workflow": "^1.120.1"
+    "n8n-workflow": "^2.0.0"
   }
 }
