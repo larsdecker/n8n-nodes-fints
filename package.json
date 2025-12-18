@@ -41,17 +41,17 @@
     ]
   },
   "devDependencies": {
-    "@typescript-eslint/parser": "^8.46.2",
-    "eslint": "^9.38.0",
+    "@typescript-eslint/parser": "^8.50.0",
+    "eslint": "^9.39.2",
     "eslint-plugin-n8n-nodes-base": "^1.16.4",
     "gulp": "^5.0.1",
-    "prettier": "^3.6.2",
+    "prettier": "^3.7.4",
     "typescript": "^5.9.3"
   },
   "dependencies": {
     "fints": "0.5.0"
   },
   "peerDependencies": {
-    "n8n-workflow": "^1.115.0"
+    "n8n-workflow": "^1.120.1"
   }
 }
