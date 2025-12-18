@@ -73,6 +73,8 @@ Once you have these details, create new credentials in n8n under **Settings → 
 Publishing from CI requires an npm automation token stored as the `NPM_TOKEN` repository secret. Generate the token in the npm account settings, ensure it has automation scope, and add it under **Settings → Secrets and variables → Actions** before pushing release commits or tags. The GitHub Actions workflow validates that the secret is present and aborts with a descriptive error if it is missing.
 
 ## Version history
+- **0.10.0** (2025-12-18): Upgrade the n8n-workflow Package to the version 2.x and address breaking changes
+- **0.9.1** (2025-12-17): Fixes for a bug with invalid url in some cases.
 - **0.8.0** (2025-07-25): Externalize the bank configuration to a separate file and add more banks to it.
 - **0.7.0** (2025-07-19): Optional FinTS registration number can now be configured.
 - **0.6.0** (2025-07-05): Added Sparda and PSD Bank
