@@ -1,14 +1,9 @@
 import type {
 	IDataObject,
-	IExecutePaginationFunctions,
-	IExecuteSingleFunctions,
-	IHttpRequestOptions,
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
-	IN8nRequestOperations,
-	PostReceiveAction,
-	PreSendAction,
+	IExecuteFunctions,
 } from 'n8n-workflow';
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
@@ -69,55 +64,7 @@ interface FintsRequestMetadata {
 	endDate: Date;
 }
 
-type FintsHttpRequestOptions = IHttpRequestOptions & { fints?: FintsRequestMetadata };
-
 type FintsCredentialData = { userId: string; pin: string };
-
-const prepareFintsRequest: PreSendAction = async function (
-	this: IExecuteSingleFunctions,
-	requestOptions,
-) {
-	const itemIndex = this.getItemIndex();
-	const extendedOptions = requestOptions as FintsHttpRequestOptions;
-	extendedOptions.fints = await buildFintsRequestMetadata(this, itemIndex);
-	return extendedOptions;
-};
-
-const attachPairedItem: PostReceiveAction = async function (this: IExecuteSingleFunctions, items) {
-	const itemIndex = this.getItemIndex();
-	return items.map((item) => ({
-		...item,
-		pairedItem: { item: itemIndex },
-	}));
-};
-
-const runAccountStatementRequest: NonNullable<IN8nRequestOperations['pagination']> =
-	async function (
-		this: IExecutePaginationFunctions,
-		requestOptions,
-	): Promise<INodeExecutionData[]> {
-		const itemIndex = this.getItemIndex();
-		const options = requestOptions.options as FintsHttpRequestOptions | undefined;
-		const metadata = options?.fints ?? (await buildFintsRequestMetadata(this, itemIndex));
-		const client = new PinTanClient(metadata.config);
-		const accounts = await client.accounts();
-
-		if (!accounts.length) {
-			throw new NodeOperationError(
-				this.getNode(),
-				'No accounts found for the provided credentials. Please verify your User ID, PIN, and bank configuration.',
-				{ itemIndex },
-			);
-		}
-
-		const summaries = await collectAccountSummaries(this, client, accounts, metadata);
-
-		if (options?.fints) {
-			delete options.fints;
-		}
-
-		return summaries.map((summary) => ({ json: summary }));
-	};
 
 /**
  * Builds the metadata required for a FinTS request, including client configuration and date range.
@@ -126,12 +73,14 @@ const runAccountStatementRequest: NonNullable<IN8nRequestOperations['pagination'
  * @returns Promise resolving to the FinTS request metadata
  */
 async function buildFintsRequestMetadata(
-	context: IExecuteSingleFunctions,
+	context: IExecuteFunctions,
 	itemIndex: number,
 ): Promise<FintsRequestMetadata> {
 	const credentials = await context.getCredentials<FintsCredentialData>('fintsApi', itemIndex);
 	const { blz, fintsUrl } = resolveBankConfiguration(context, itemIndex);
-	const fintsProductId = (context.getNodeParameter('fintsProductId', '') as string).trim();
+	const fintsProductId = (
+		context.getNodeParameter('fintsProductId', itemIndex, '') as string
+	).trim();
 
 	const config: PinTanClientConfig = {
 		url: fintsUrl,
@@ -163,14 +112,14 @@ async function buildFintsRequestMetadata(
  * @throws NodeOperationError if configuration is invalid or bank is not found
  */
 function resolveBankConfiguration(
-	context: IExecuteSingleFunctions,
+	context: IExecuteFunctions,
 	itemIndex: number,
 ): BankConfiguration {
-	const expertMode = context.getNodeParameter('expertMode', false) === true;
+	const expertMode = context.getNodeParameter('expertMode', itemIndex, false) === true;
 
 	if (expertMode) {
-		const blz = (context.getNodeParameter('blz', '') as string).trim();
-		const fintsUrl = (context.getNodeParameter('fintsUrl', '') as string).trim();
+		const blz = (context.getNodeParameter('blz', itemIndex, '') as string).trim();
+		const fintsUrl = (context.getNodeParameter('fintsUrl', itemIndex, '') as string).trim();
 
 		if (blz === '' || fintsUrl === '') {
 			throw new NodeOperationError(
@@ -200,7 +149,7 @@ function resolveBankConfiguration(
 		return { blz, fintsUrl };
 	}
 
-	const bank = context.getNodeParameter('bank') as string;
+	const bank = context.getNodeParameter('bank', itemIndex) as string;
 	const configuration = bankMap[bank];
 
 	if (!configuration) {
@@ -222,9 +171,9 @@ function resolveBankConfiguration(
  * @returns Object containing validated start and end dates
  * @throws NodeOperationError if start date is after end date
  */
-function resolveDateRange(context: IExecuteSingleFunctions, itemIndex: number) {
-	const startDateValue = context.getNodeParameter('startDate', '') as string;
-	const endDateValue = context.getNodeParameter('endDate', '') as string;
+function resolveDateRange(context: IExecuteFunctions, itemIndex: number) {
+	const startDateValue = context.getNodeParameter('startDate', itemIndex, '') as string;
+	const endDateValue = context.getNodeParameter('endDate', itemIndex, '') as string;
 
 	const endDate =
 		endDateValue !== ''
@@ -257,7 +206,7 @@ function resolveDateRange(context: IExecuteSingleFunctions, itemIndex: number) {
  * @throws NodeOperationError if the date string is invalid
  */
 function parseDateParameter(
-	context: IExecuteSingleFunctions,
+	context: IExecuteFunctions,
 	value: string,
 	parameterName: string,
 	itemIndex: number,
@@ -283,7 +232,7 @@ function parseDateParameter(
  * @returns Promise resolving to array of account summaries
  */
 async function collectAccountSummaries(
-	context: IExecuteSingleFunctions,
+	context: IExecuteFunctions,
 	client: PinTanClient,
 	accounts: SEPAAccount[],
 	metadata: FintsRequestMetadata,
@@ -419,17 +368,6 @@ export class FintsNode implements INodeType {
 						action: 'Get statements',
 						description:
 							'Retrieve balances and recent transactions for the connected FinTS accounts',
-						routing: {
-							send: {
-								preSend: [prepareFintsRequest],
-							},
-							operations: {
-								pagination: runAccountStatementRequest,
-							},
-							output: {
-								postReceive: [attachPairedItem],
-							},
-						},
 					},
 				],
 			},
@@ -529,4 +467,40 @@ export class FintsNode implements INodeType {
 		],
 		version: 1,
 	};
+
+	async execute(this: IExecuteFunctions) {
+		const items = this.getInputData();
+		const returnData: INodeExecutionData[] = [];
+
+		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
+			try {
+				const metadata = await buildFintsRequestMetadata(this, itemIndex);
+				const client = new PinTanClient(metadata.config);
+				const accounts = await client.accounts();
+
+				if (!accounts.length) {
+					throw new NodeOperationError(
+						this.getNode(),
+						'No accounts found for the provided credentials. Please verify your User ID, PIN, and bank configuration.',
+						{ itemIndex },
+					);
+				}
+
+				const summaries = await collectAccountSummaries(this, client, accounts, metadata);
+				returnData.push(...summaries.map((summary) => ({ json: summary })));
+			} catch (error) {
+				if (error instanceof NodeOperationError) {
+					throw error;
+				}
+
+				throw new NodeOperationError(
+					this.getNode(),
+					`Error fetching FinTS data: ${error instanceof Error ? error.message : String(error)}`,
+					{ itemIndex },
+				);
+			}
+		}
+
+		return [returnData];
+	}
 }
