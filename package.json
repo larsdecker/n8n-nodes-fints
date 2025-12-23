@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-fints",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "FinTS Node - Access and fetch balance information from German bank accounts via FinTS/HBCI protocol",
   "keywords": [
     "n8n-community-node-package"
@@ -41,7 +41,7 @@
     ]
   },
   "devDependencies": {
-    "@typescript-eslint/parser": "^8.50.0",
+    "@typescript-eslint/parser": "^8.50.1",
     "eslint": "^9.39.2",
     "eslint-plugin-n8n-nodes-base": "^1.16.4",
     "gulp": "^5.0.1",
@@ -49,9 +49,9 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "fints": "0.5.0"
+    "fints-lib": "0.7.0"
   },
   "peerDependencies": {
-    "n8n-workflow": "^2.0.0"
+    "n8n-workflow": "^2.2.1"
   }
 }

@@ -6,16 +6,14 @@ import type {
 	IExecuteFunctions,
 } from 'n8n-workflow';
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
-
-// Use the 'fints' package (npm install fints)
-import { PinTanClient } from 'fints';
-import type {
-	PinTanClientConfig,
-	SEPAAccount,
-	Statement,
-	StructuredDescription,
-	Transaction,
-} from 'fints';
+import {
+	PinTanClient,
+	type PinTanClientConfig,
+	type SEPAAccount,
+	type Statement,
+	type Transaction,
+	type StructuredDescription,
+} from 'fints-lib/';
 import banks from './banks.json';
 
 // Build dropdown options from banks.json for the UI
