@@ -462,6 +462,19 @@ export class FintsNode implements INodeType {
 					},
 				},
 			},
+			{
+				displayName: 'Exclude IBANs/Account Numbers',
+				name: 'excludeAccounts',
+				type: 'string',
+				default: '',
+				description: 'Comma-separated list of IBANs or account numbers to exclude from the results',
+				displayOptions: {
+					show: {
+						resource: ['account'],
+						operation: ['getStatements'],
+					},
+				},
+			},
 		],
 		version: 1,
 	};
@@ -484,7 +497,23 @@ export class FintsNode implements INodeType {
 					);
 				}
 
-				const summaries = await collectAccountSummaries(this, client, accounts, metadata);
+				// Filter accounts based on excludeAccounts parameter
+				const excludeAccountsRaw = this.getNodeParameter('excludeAccounts', itemIndex) as string;
+				const excludeList = excludeAccountsRaw
+					.split(',')
+					.map((s) => s.trim().toUpperCase())
+					.filter((s) => s !== '');
+
+				let filteredAccounts = accounts;
+				if (excludeList.length > 0) {
+					filteredAccounts = accounts.filter((account) => {
+						const iban = (account.iban || '').toUpperCase();
+						const accNo = (account.accountNumber || '').toUpperCase();
+						return !excludeList.includes(iban) && !excludeList.includes(accNo);
+					});
+				}
+
+				const summaries = await collectAccountSummaries(this, client, filteredAccounts, metadata);
 				returnData.push(...this.helpers.returnJsonArray(summaries));
 			} catch (error) {
 				if (error instanceof NodeOperationError) {
