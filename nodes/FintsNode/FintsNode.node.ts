@@ -672,6 +672,15 @@ export class FintsNode implements INodeType {
 					this.logger.info(`Filtered to ${filteredAccounts.length} account(s) after exclusions`);
 				}
 
+				// If all accounts were filtered out by the exclusion list, provide a clear error
+				if (excludeList.length > 0 && accounts.length > 0 && filteredAccounts.length === 0) {
+					const msg =
+						'All available accounts were excluded by the "Exclude Accounts" filter. ' +
+						'Please adjust the "Exclude Accounts" parameter so that at least one account remains.';
+					addDebugLog(`⚠️ ${msg}`);
+					this.logger.warn(msg);
+					throw new NodeOperationError(this.getNode(), msg, { itemIndex });
+				}
 				// Collect account summaries
 				const summaries = await collectAccountSummaries(
 					this,
