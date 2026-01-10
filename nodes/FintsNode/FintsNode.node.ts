@@ -227,6 +227,7 @@ function parseDateParameter(
  * @param client - The FinTS client instance
  * @param accounts - Array of SEPA accounts to process
  * @param metadata - FinTS request metadata including date range
+ * @param debugLogs - Optional array to collect debug messages
  * @returns Promise resolving to array of account summaries
  */
 async function collectAccountSummaries(
@@ -234,17 +235,34 @@ async function collectAccountSummaries(
 	client: PinTanClient,
 	accounts: SEPAAccount[],
 	metadata: FintsRequestMetadata,
+	debugLogs?: string[],
 ): Promise<AccountSummary[]> {
 	const summaries: AccountSummary[] = [];
 
 	for (const account of accounts) {
+		const accountId = account.iban || account.accountNumber || 'unknown';
 		try {
+			if (debugLogs) {
+				debugLogs.push(`Fetching statements for account ${accountId}...`);
+			}
+			context.logger.info(`Fetching statements for account ${accountId}`);
+
 			const statements = await client.statements(account, metadata.startDate, metadata.endDate);
-			summaries.push(toAccountSummary(account, statements, metadata.bankCode));
+			const summary = toAccountSummary(account, statements, metadata.bankCode);
+			summaries.push(summary);
+
+			const transactionCount = summary.transactions.length;
+			if (debugLogs) {
+				debugLogs.push(`Found ${transactionCount} transaction(s) for account ${accountId}`);
+			}
+			context.logger.info(`Found ${transactionCount} transaction(s) for account ${accountId}`);
 		} catch (error) {
-			const accountId = account.iban || account.accountNumber || 'unknown';
 			const message = error instanceof Error ? error.message : String(error);
-			context.logger.warn(`Failed to fetch statements for account ${accountId}: ${message}`);
+			const errorMsg = `Failed to fetch statements for account ${accountId}: ${message}`;
+			context.logger.warn(errorMsg);
+			if (debugLogs) {
+				debugLogs.push(`⚠️ ${errorMsg}`);
+			}
 		}
 	}
 
@@ -462,6 +480,20 @@ export class FintsNode implements INodeType {
 					},
 				},
 			},
+			{
+				displayName: 'Debug Mode',
+				name: 'debugMode',
+				type: 'boolean',
+				default: false,
+				description:
+					'Whether to include detailed debug logs in the output. When enabled, adds a _debug property to each output item with step-by-step execution information.',
+				displayOptions: {
+					show: {
+						resource: ['account'],
+						operation: ['getStatements'],
+					},
+				},
+			},
 		],
 		version: 1,
 	};
@@ -471,31 +503,120 @@ export class FintsNode implements INodeType {
 		const returnData: INodeExecutionData[] = [];
 
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
+			const debugMode = this.getNodeParameter('debugMode', itemIndex, false) as boolean;
+			const debugLogs: string[] = [];
+
 			try {
+				if (debugMode) {
+					debugLogs.push('Starting FinTS execution...');
+				}
+				this.logger.info(`Starting FinTS execution for item ${itemIndex}`);
+
+				// Build request metadata
+				if (debugMode) {
+					debugLogs.push('Building request metadata...');
+				}
 				const metadata = await buildFintsRequestMetadata(this, itemIndex);
+				if (debugMode) {
+					debugLogs.push(
+						`Configuration: Bank code ${metadata.bankCode}, Date range: ${metadata.startDate.toISOString().split('T')[0]} to ${metadata.endDate.toISOString().split('T')[0]}`,
+					);
+				}
+				this.logger.info(
+					`FinTS request metadata: Bank code ${metadata.bankCode}, Date range: ${metadata.startDate.toISOString()} to ${metadata.endDate.toISOString()}`,
+				);
+
+				// Authenticate and fetch accounts
+				if (debugMode) {
+					debugLogs.push('Authenticating with FinTS server...');
+				}
+				this.logger.info('Authenticating with FinTS server');
+
 				const client = new PinTanClient(metadata.config);
+
+				if (debugMode) {
+					debugLogs.push('Fetching accounts...');
+				}
+				this.logger.info('Fetching accounts from FinTS server');
+
 				const accounts = await client.accounts();
 
 				if (!accounts.length) {
-					throw new NodeOperationError(
-						this.getNode(),
-						'No accounts found for the provided credentials. Please verify your User ID, PIN, and bank configuration.',
-						{ itemIndex },
-					);
+					const errorMsg =
+						'No accounts found for the provided credentials. Please verify your User ID, PIN, and bank configuration.';
+					if (debugMode) {
+						debugLogs.push(`❌ ${errorMsg}`);
+					}
+					this.logger.error(errorMsg);
+					throw new NodeOperationError(this.getNode(), errorMsg, { itemIndex });
 				}
 
-				const summaries = await collectAccountSummaries(this, client, accounts, metadata);
-				returnData.push(...this.helpers.returnJsonArray(summaries));
+				if (debugMode) {
+					debugLogs.push(`Found ${accounts.length} account(s)`);
+				}
+				this.logger.info(`Found ${accounts.length} account(s)`);
+
+				// Collect account summaries
+				const summaries = await collectAccountSummaries(
+					this,
+					client,
+					accounts,
+					metadata,
+					debugMode ? debugLogs : undefined,
+				);
+
+				if (summaries.length === 0) {
+					const warnMsg = 'No account data could be retrieved. All accounts may have failed.';
+					if (debugMode) {
+						debugLogs.push(`⚠️ ${warnMsg}`);
+					}
+					this.logger.warn(warnMsg);
+				} else {
+					if (debugMode) {
+						debugLogs.push(`Successfully retrieved data for ${summaries.length} account(s)`);
+					}
+					this.logger.info(`Successfully retrieved data for ${summaries.length} account(s)`);
+				}
+
+				// Prepare output items
+				const outputItems = this.helpers.returnJsonArray(summaries);
+
+				// Attach debug logs if debug mode is enabled
+				if (debugMode) {
+					debugLogs.push('Execution completed successfully');
+					outputItems.forEach((item) => {
+						item.json._debug = debugLogs;
+					});
+				}
+
+				returnData.push(...outputItems);
 			} catch (error) {
 				if (error instanceof NodeOperationError) {
+					// Already a well-formatted error, just add debug logs if available
+					if (debugMode && debugLogs.length > 0) {
+						const existingMessage = error.message;
+						debugLogs.push(`❌ Error: ${existingMessage}`);
+						throw new NodeOperationError(
+							this.getNode(),
+							`${existingMessage}\n\nDebug logs: ${JSON.stringify(debugLogs, null, 2)}`,
+							{ itemIndex },
+						);
+					}
 					throw error;
 				}
 
-				throw new NodeOperationError(
-					this.getNode(),
-					`Error fetching FinTS data: ${error instanceof Error ? error.message : String(error)}`,
-					{ itemIndex },
-				);
+				// Generic error - provide more context
+				const errorMessage = error instanceof Error ? error.message : String(error);
+				if (debugMode) {
+					debugLogs.push(`❌ Unexpected error: ${errorMessage}`);
+				}
+				this.logger.error(`Error fetching FinTS data for item ${itemIndex}: ${errorMessage}`);
+
+				const fullErrorMsg = debugMode
+					? `Error fetching FinTS data: ${errorMessage}\n\nDebug logs: ${JSON.stringify(debugLogs, null, 2)}`
+					: `Error fetching FinTS data: ${errorMessage}`;
+
+				throw new NodeOperationError(this.getNode(), fullErrorMsg, { itemIndex });
 			}
 		}
 
