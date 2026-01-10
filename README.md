@@ -39,7 +39,8 @@ Once you have these details, create new credentials in n8n under **Settings → 
 3. **Choose** the operation: **Get Account Balance**.
 4. **Configure** the parameters. The node automatically retrieves all accounts linked to your login.
 5. **Optionally**, set **Start Date** and **End Date** to limit the booking range. If left empty, the node fetches statements from the last 14 days up to today.
-6. **Execute** the workflow to receive a response object containing `balance`,`currency`, `bank`, `account`, and an array of `transactions`.
+6. **Optionally**, enable **Include Firefly III Fields** to add a nested `firefly` object with fields compatible with Firefly III personal finance software.
+7. **Execute** the workflow to receive a response object containing `balance`,`currency`, `bank`, `account`, and an array of `transactions`.
 
 ```json
 [
@@ -62,6 +63,43 @@ Once you have these details, create new credentials in n8n under **Settings → 
 	}
 ]
 ```
+
+### Firefly III Integration
+
+When you enable the **Include Firefly III Fields** option, each transaction will include an additional nested `firefly` object with fields specifically mapped for [Firefly III](https://www.firefly-iii.org/) compatibility:
+
+```json
+{
+	"amount": 20,
+	"text": "Some payment",
+	"valueDate": "2025-06-03",
+	"currency": "EUR",
+	"reference": "XYZ",
+	"isCredit": true,
+	"isExpense": false,
+	"firefly": {
+		"transactionId": "20250603-001",
+		"transactionType": "deposit",
+		"description": "Some payment",
+		"date": "2025-06-03",
+		"sendingAccount": "DE98370400440532013000",
+		"targetAccount": "DEXXXXXXXXXX",
+		"notes": "Customer Ref: ABC123",
+		"endToEndRef": "NOTPROVIDED"
+	}
+}
+```
+
+**Firefly III Field Descriptions:**
+
+- **transactionId**: Unique transaction identifier from FinTS
+- **transactionType**: `deposit` for incoming payments, `withdrawal` for outgoing payments
+- **description**: Payment description text
+- **date**: Transaction value date
+- **sendingAccount**: IBAN of the sending account
+- **targetAccount**: IBAN of the receiving account
+- **notes**: Additional reference information (customer reference, mandate reference, creditor ID, prima nota)
+- **endToEndRef**: SEPA end-to-end reference (EREF+ tag), equivalent to `sepa_ct_id` in Firefly III
 
 ## Resources
 
