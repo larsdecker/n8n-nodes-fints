@@ -498,7 +498,7 @@ export class FintsNode implements INodeType {
 				}
 
 				// Filter accounts based on excludeAccounts parameter
-				const excludeAccountsRaw = this.getNodeParameter('excludeAccounts', itemIndex) as string;
+				const excludeAccountsRaw = (this.getNodeParameter('excludeAccounts', itemIndex) as string) || '';
 				const excludeList = excludeAccountsRaw
 					.split(',')
 					.map((s) => s.trim().toUpperCase())
