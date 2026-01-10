@@ -585,7 +585,8 @@ export class FintsNode implements INodeType {
 				if (debugMode) {
 					debugLogs.push('Execution completed successfully');
 					outputItems.forEach((item) => {
-						item.json._debug = debugLogs;
+						// Create a copy of debug logs for each item to avoid shared references
+						item.json._debug = [...debugLogs];
 					});
 				}
 
