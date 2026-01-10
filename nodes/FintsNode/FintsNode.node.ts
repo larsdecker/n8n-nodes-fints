@@ -267,10 +267,7 @@ async function collectAccountSummaries(
 			context.logger.info(`Fetching statements for account ${accountId}`);
 
 			const statements = await client.statements(account, metadata.startDate, metadata.endDate);
-			summaries.push(
-				toAccountSummary(account, statements, metadata.bankCode, includeFireflyFields),
-			);
-			const summary = toAccountSummary(account, statements, metadata.bankCode);
+			const summary = toAccountSummary(account, statements, metadata.bankCode, includeFireflyFields);
 			summaries.push(summary);
 
 			const transactionCount = summary.transactions.length;
@@ -650,6 +647,7 @@ export class FintsNode implements INodeType {
 					client,
 					accounts,
 					metadata,
+					includeFireflyFields,
 					debugMode ? debugLogs : undefined,
 				);
 
@@ -662,14 +660,6 @@ export class FintsNode implements INodeType {
 					this.logger.info(`Successfully retrieved data for ${summaries.length} account(s)`);
 				}
 
-				const summaries = await collectAccountSummaries(
-					this,
-					client,
-					accounts,
-					metadata,
-					includeFireflyFields,
-				);
-				returnData.push(...this.helpers.returnJsonArray(summaries));
 				// Prepare output items
 				const outputItems = this.helpers.returnJsonArray(summaries);
 
