@@ -562,24 +562,6 @@ export class FintsNode implements INodeType {
 				addDebugLog(`Found ${accounts.length} account(s)`);
 				this.logger.info(`Found ${accounts.length} account(s)`);
 
-				// Collect account summaries
-				const summaries = await collectAccountSummaries(
-					this,
-					client,
-					accounts,
-					metadata,
-					debugMode ? debugLogs : undefined,
-				);
-
-				if (summaries.length === 0) {
-					const warnMsg = 'No account data could be retrieved. All accounts may have failed.';
-					addDebugLog(`⚠️ ${warnMsg}`);
-					this.logger.warn(warnMsg);
-				} else {
-					addDebugLog(`Successfully retrieved data for ${summaries.length} account(s)`);
-					this.logger.info(`Successfully retrieved data for ${summaries.length} account(s)`);
-				}
-
 				// Filter accounts based on excludeAccounts parameter
 				const excludeAccountsRaw = (this.getNodeParameter('excludeAccounts', itemIndex) as string) || '';
 				const excludeList = excludeAccountsRaw
@@ -594,10 +576,28 @@ export class FintsNode implements INodeType {
 						const accNo = (account.accountNumber || '').toUpperCase();
 						return !excludeList.includes(iban) && !excludeList.includes(accNo);
 					});
+					addDebugLog(`Filtered to ${filteredAccounts.length} account(s) after exclusions`);
+					this.logger.info(`Filtered to ${filteredAccounts.length} account(s) after exclusions`);
 				}
 
-				const summaries = await collectAccountSummaries(this, client, filteredAccounts, metadata);
-				returnData.push(...this.helpers.returnJsonArray(summaries));
+				// Collect account summaries
+				const summaries = await collectAccountSummaries(
+					this,
+					client,
+					filteredAccounts,
+					metadata,
+					debugMode ? debugLogs : undefined,
+				);
+
+				if (summaries.length === 0) {
+					const warnMsg = 'No account data could be retrieved. All accounts may have failed.';
+					addDebugLog(`⚠️ ${warnMsg}`);
+					this.logger.warn(warnMsg);
+				} else {
+					addDebugLog(`Successfully retrieved data for ${summaries.length} account(s)`);
+					this.logger.info(`Successfully retrieved data for ${summaries.length} account(s)`);
+				}
+
 				// Prepare output items
 				const outputItems = this.helpers.returnJsonArray(summaries);
 
