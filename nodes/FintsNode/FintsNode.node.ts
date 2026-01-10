@@ -45,6 +45,15 @@ interface TransactionSummary extends IDataObject {
 	reference?: string;
 	isCredit: boolean;
 	isExpense: boolean;
+	// Firefly III compatible fields
+	transactionId?: string;
+	transactionType?: string;
+	description?: string;
+	date?: string | Date;
+	sendingAccount?: string;
+	targetAccount?: string;
+	notes?: string;
+	endToEndRef?: string;
 }
 
 interface AccountSummary extends IDataObject {
@@ -267,10 +276,11 @@ function toAccountSummary(
 	const latest = statements[0];
 	const balance = latest?.closingBalance?.value ?? null;
 	const currency = latest?.closingBalance?.currency ?? null;
-	const transactions = latest ? mapTransactions(latest.transactions) : [];
+	const accountIdentifier = account.iban || account.accountNumber || null;
+	const transactions = latest ? mapTransactions(latest.transactions, accountIdentifier) : [];
 
 	return {
-		account: account.iban || account.accountNumber || null,
+		account: accountIdentifier,
 		bank: bankCode,
 		balance,
 		currency,
@@ -279,21 +289,67 @@ function toAccountSummary(
 }
 
 /**
- * Maps FinTS transaction objects to standardized transaction summaries.
+ * Maps FinTS transaction objects to standardized transaction summaries with Firefly III compatible fields.
  * Credits are positive, debits are negative in the amount field.
  * @param transactions - Array of FinTS transactions
+ * @param accountIdentifier - The IBAN or account number of the current account
  * @returns Array of standardized transaction summaries
  */
-function mapTransactions(transactions: Transaction[]): TransactionSummary[] {
-	return transactions.map((transaction) => ({
-		currency: transaction.currency ?? null,
-		amount: transaction.isCredit ? transaction.amount : -transaction.amount,
-		valueDate: transaction.valueDate,
-		text: resolveTransactionText(transaction.descriptionStructured),
-		reference: transaction.bankReference,
-		isCredit: transaction.isCredit,
-		isExpense: transaction.isExpense,
-	}));
+function mapTransactions(
+	transactions: Transaction[],
+	accountIdentifier: string | null,
+): TransactionSummary[] {
+	return transactions.map((transaction) => {
+		const text = resolveTransactionText(transaction.descriptionStructured);
+		const structured = transaction.descriptionStructured;
+		const isWithdrawal = !transaction.isCredit;
+
+		// Determine transaction type for Firefly III
+		const transactionType = transaction.isCredit ? 'deposit' : 'withdrawal';
+
+		// Extract sender and target accounts based on transaction direction
+		const counterpartyIban = structured?.iban;
+		const sendingAccount = isWithdrawal ? accountIdentifier : counterpartyIban;
+		const targetAccount = isWithdrawal ? counterpartyIban : accountIdentifier;
+
+		// Extract end-to-end reference (SEPA CT ID)
+		const endToEndRef = structured?.reference?.endToEndRef;
+
+		// Build notes from available reference information
+		const noteParts: string[] = [];
+		if (structured?.reference?.customerRef) {
+			noteParts.push(`Customer Ref: ${structured.reference.customerRef}`);
+		}
+		if (structured?.reference?.mandateRef) {
+			noteParts.push(`Mandate Ref: ${structured.reference.mandateRef}`);
+		}
+		if (structured?.reference?.creditorId) {
+			noteParts.push(`Creditor ID: ${structured.reference.creditorId}`);
+		}
+		if (structured?.primaNota) {
+			noteParts.push(`Prima Nota: ${structured.primaNota}`);
+		}
+		const notes = noteParts.length > 0 ? noteParts.join(', ') : undefined;
+
+		return {
+			currency: transaction.currency ?? null,
+			amount: transaction.isCredit ? transaction.amount : -transaction.amount,
+			valueDate: transaction.valueDate,
+			text,
+			reference: transaction.bankReference,
+			isCredit: transaction.isCredit,
+			isExpense: transaction.isExpense,
+			// Firefly III compatible fields
+			transactionId: transaction.id,
+			transactionType,
+			description: text,
+			date: transaction.valueDate,
+			sendingAccount: sendingAccount || undefined,
+			targetAccount: targetAccount || undefined,
+			notes,
+			endToEndRef,
+		};
+	});
 }
 
 /**

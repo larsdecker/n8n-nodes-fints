@@ -56,12 +56,35 @@ Once you have these details, create new credentials in n8n under **Settings → 
 				"currency": "EUR",
 				"reference": "XYZ",
 				"isCredit": true,
-				"isExpense": false
+				"isExpense": false,
+				"transactionId": "20250603-001",
+				"transactionType": "deposit",
+				"description": "Some payment",
+				"date": "2025-06-03",
+				"sendingAccount": "DE98370400440532013000",
+				"targetAccount": "DEXXXXXXXXXX",
+				"notes": "Customer Ref: ABC123",
+				"endToEndRef": "NOTPROVIDED"
 			}
 		]
 	}
 ]
 ```
+
+### Firefly III Integration
+
+The transaction data includes fields specifically mapped for [Firefly III](https://www.firefly-iii.org/) compatibility:
+
+- **transactionId**: Unique transaction identifier from FinTS
+- **transactionType**: `deposit` for incoming payments, `withdrawal` for outgoing payments
+- **description**: Payment description text
+- **date**: Transaction value date
+- **sendingAccount**: IBAN of the sending account
+- **targetAccount**: IBAN of the receiving account
+- **notes**: Additional reference information (customer reference, mandate reference, creditor ID, prima nota)
+- **endToEndRef**: SEPA end-to-end reference (EREF+ tag), equivalent to `sepa_ct_id` in Firefly III
+- **currency**: Transaction currency (e.g., EUR)
+- **amount**: Transaction amount (negative for withdrawals, positive for deposits)
 
 ## Resources
 
