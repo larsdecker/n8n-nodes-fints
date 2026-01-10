@@ -37,6 +37,17 @@ const BLZ_PATTERN = /^\d{8}$/;
 
 type BankConfiguration = { blz: string; fintsUrl: string };
 
+interface FireflyFields extends IDataObject {
+	transactionId?: string;
+	transactionType?: string;
+	description?: string;
+	date?: string | Date;
+	sendingAccount?: string;
+	targetAccount?: string;
+	notes?: string;
+	endToEndRef?: string;
+}
+
 interface TransactionSummary extends IDataObject {
 	currency: string | null;
 	amount: number;
@@ -45,6 +56,7 @@ interface TransactionSummary extends IDataObject {
 	reference?: string;
 	isCredit: boolean;
 	isExpense: boolean;
+	firefly?: FireflyFields;
 }
 
 interface AccountSummary extends IDataObject {
@@ -227,6 +239,7 @@ function parseDateParameter(
  * @param client - The FinTS client instance
  * @param accounts - Array of SEPA accounts to process
  * @param metadata - FinTS request metadata including date range
+ * @param includeFireflyFields - Whether to include Firefly III compatible fields
  * @param debugLogs - Optional array to collect debug messages
  * @returns Promise resolving to array of account summaries
  */
@@ -235,6 +248,7 @@ async function collectAccountSummaries(
 	client: PinTanClient,
 	accounts: SEPAAccount[],
 	metadata: FintsRequestMetadata,
+	includeFireflyFields: boolean,
 	debugLogs?: string[],
 ): Promise<AccountSummary[]> {
 	const summaries: AccountSummary[] = [];
@@ -253,7 +267,7 @@ async function collectAccountSummaries(
 			context.logger.info(`Fetching statements for account ${accountId}`);
 
 			const statements = await client.statements(account, metadata.startDate, metadata.endDate);
-			const summary = toAccountSummary(account, statements, metadata.bankCode);
+			const summary = toAccountSummary(account, statements, metadata.bankCode, includeFireflyFields);
 			summaries.push(summary);
 
 			const transactionCount = summary.transactions.length;
@@ -275,21 +289,26 @@ async function collectAccountSummaries(
  * @param account - The SEPA account information
  * @param statements - Array of account statements
  * @param bankCode - The bank code (BLZ)
+ * @param includeFireflyFields - Whether to include Firefly III compatible fields
  * @returns Standardized account summary with balance and transactions
  */
 function toAccountSummary(
 	account: SEPAAccount,
 	statements: Statement[],
 	bankCode: string,
+	includeFireflyFields: boolean,
 ): AccountSummary {
 	// Use the most recent statement for balance information
 	const latest = statements[0];
 	const balance = latest?.closingBalance?.value ?? null;
 	const currency = latest?.closingBalance?.currency ?? null;
-	const transactions = latest ? mapTransactions(latest.transactions) : [];
+	const accountIdentifier = account.iban || account.accountNumber || null;
+	const transactions = latest
+		? mapTransactions(latest.transactions, accountIdentifier, includeFireflyFields)
+		: [];
 
 	return {
-		account: account.iban || account.accountNumber || null,
+		account: accountIdentifier,
 		bank: bankCode,
 		balance,
 		currency,
@@ -298,21 +317,77 @@ function toAccountSummary(
 }
 
 /**
- * Maps FinTS transaction objects to standardized transaction summaries.
+ * Maps FinTS transaction objects to standardized transaction summaries with optional Firefly III compatible fields.
  * Credits are positive, debits are negative in the amount field.
  * @param transactions - Array of FinTS transactions
+ * @param accountIdentifier - The IBAN or account number of the current account
+ * @param includeFireflyFields - Whether to include Firefly III compatible fields in a nested object
  * @returns Array of standardized transaction summaries
  */
-function mapTransactions(transactions: Transaction[]): TransactionSummary[] {
-	return transactions.map((transaction) => ({
-		currency: transaction.currency ?? null,
-		amount: transaction.isCredit ? transaction.amount : -transaction.amount,
-		valueDate: transaction.valueDate,
-		text: resolveTransactionText(transaction.descriptionStructured),
-		reference: transaction.bankReference,
-		isCredit: transaction.isCredit,
-		isExpense: transaction.isExpense,
-	}));
+function mapTransactions(
+	transactions: Transaction[],
+	accountIdentifier: string | null,
+	includeFireflyFields: boolean,
+): TransactionSummary[] {
+	return transactions.map((transaction) => {
+		const text = resolveTransactionText(transaction.descriptionStructured);
+		const structured = transaction.descriptionStructured;
+
+		const result: TransactionSummary = {
+			currency: transaction.currency ?? null,
+			amount: transaction.isCredit ? transaction.amount : -transaction.amount,
+			valueDate: transaction.valueDate,
+			text,
+			reference: transaction.bankReference,
+			isCredit: transaction.isCredit,
+			isExpense: transaction.isExpense,
+		};
+
+		// Only include Firefly III fields if requested
+		if (includeFireflyFields) {
+			const isWithdrawal = !transaction.isCredit;
+
+			// Determine transaction type for Firefly III
+			const transactionType = transaction.isCredit ? 'deposit' : 'withdrawal';
+
+			// Extract sender and target accounts based on transaction direction
+			const counterpartyIban = structured?.iban;
+			const sendingAccount = isWithdrawal ? accountIdentifier : counterpartyIban;
+			const targetAccount = isWithdrawal ? counterpartyIban : accountIdentifier;
+
+			// Extract end-to-end reference (SEPA CT ID)
+			const endToEndRef = structured?.reference?.endToEndRef;
+
+			// Build notes from available reference information
+			const noteParts: string[] = [];
+			if (structured?.reference?.customerRef) {
+				noteParts.push(`Customer Ref: ${structured.reference.customerRef}`);
+			}
+			if (structured?.reference?.mandateRef) {
+				noteParts.push(`Mandate Ref: ${structured.reference.mandateRef}`);
+			}
+			if (structured?.reference?.creditorId) {
+				noteParts.push(`Creditor ID: ${structured.reference.creditorId}`);
+			}
+			if (structured?.primaNota) {
+				noteParts.push(`Prima Nota: ${structured.primaNota}`);
+			}
+			const notes = noteParts.length > 0 ? noteParts.join(', ') : undefined;
+
+			result.firefly = {
+				transactionId: transaction.id,
+				transactionType,
+				description: text,
+				date: transaction.valueDate,
+				sendingAccount: sendingAccount || undefined,
+				targetAccount: targetAccount || undefined,
+				notes,
+				endToEndRef,
+			};
+		}
+
+		return result;
+	});
 }
 
 /**
@@ -482,12 +557,12 @@ export class FintsNode implements INodeType {
 				},
 			},
 			{
-				displayName: 'Debug Mode',
-				name: 'debugMode',
+				displayName: 'Include Firefly III Fields',
+				name: 'includeFireflyFields',
 				type: 'boolean',
 				default: false,
 				description:
-					'Whether to include detailed debug logs in the output. When enabled, adds a _debug property to each output item with step-by-step execution information.',
+					'Whether to include additional fields in a nested "firefly" object for direct integration with Firefly III personal finance software',
 				displayOptions: {
 					show: {
 						resource: ['account'],
@@ -495,6 +570,20 @@ export class FintsNode implements INodeType {
 					},
 				},
 			},
+      {
+        displayName: 'Debug Mode',
+				name: 'debugMode',
+				type: 'boolean',
+				default: false,
+				description:
+					'Whether to include detailed debug logs in the output. When enabled, adds a _debug property to each output item with step-by-step execution information.',
+        displayOptions: {
+            show: {
+              resource: ['account'],
+              operation: ['getStatements'],
+            },
+          },
+      }
 		],
 		version: 1,
 	};
@@ -521,6 +610,8 @@ export class FintsNode implements INodeType {
 				// Build request metadata
 				addDebugLog('Building request metadata...');
 				const metadata = await buildFintsRequestMetadata(this, itemIndex);
+				const includeFireflyFields =
+					(this.getNodeParameter('includeFireflyFields', itemIndex) as boolean) || false;
 				addDebugLog(
 					`Configuration: Bank code ${metadata.bankCode}, Date range: ${metadata.startDate.toISOString().split('T')[0]} to ${metadata.endDate.toISOString().split('T')[0]}`,
 				);
@@ -556,6 +647,7 @@ export class FintsNode implements INodeType {
 					client,
 					accounts,
 					metadata,
+					includeFireflyFields,
 					debugMode ? debugLogs : undefined,
 				);
 
