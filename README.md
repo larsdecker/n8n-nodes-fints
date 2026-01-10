@@ -40,7 +40,8 @@ Once you have these details, create new credentials in n8n under **Settings → 
 4. **Configure** the parameters. The node automatically retrieves all accounts linked to your login.
 5. **Optionally**, set **Start Date** and **End Date** to limit the booking range. If left empty, the node fetches statements from the last 14 days up to today.
 6. **Optionally**, enable **Include Firefly III Fields** to add a nested `firefly` object with fields compatible with Firefly III personal finance software.
-7. **Execute** the workflow to receive a response object containing `balance`,`currency`, `bank`, `account`, and an array of `transactions`.
+7. **Optionally**, use **Exclude IBANs/Account Numbers** to filter out specific accounts from the results by providing a comma-separated list of IBANs or account numbers to exclude.
+8. **Execute** the workflow to receive a response object containing `balance`,`currency`, `bank`, `account`, and an array of `transactions`.
 
 ```json
 [
@@ -100,6 +101,23 @@ When you enable the **Include Firefly III Fields** option, each transaction will
 - **targetAccount**: IBAN of the receiving account
 - **notes**: Additional reference information (customer reference, mandate reference, creditor ID, prima nota)
 - **endToEndRef**: SEPA end-to-end reference (EREF+ tag), equivalent to `sepa_ct_id` in Firefly III
+
+### Filtering Accounts
+
+The **Exclude IBANs/Account Numbers** parameter allows you to filter out specific accounts from the results. This is useful when you have multiple accounts linked to your FinTS login but only want to process a subset of them.
+
+**How to use:**
+- Enter a comma-separated list of IBANs or account numbers you want to exclude
+- Matching is case-insensitive
+- Whitespace around entries is automatically trimmed
+- Both full IBANs (e.g., `DE89370400440532013000`) and account numbers (e.g., `12345678`) are supported
+
+**Example:**
+```
+DE89370400440532013000, 87654321
+```
+
+This will exclude the account with IBAN `DE89370400440532013000` and the account with account number `87654321` from the results.
 
 ## Resources
 
