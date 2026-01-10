@@ -240,6 +240,7 @@ function parseDateParameter(
  * @param accounts - Array of SEPA accounts to process
  * @param metadata - FinTS request metadata including date range
  * @param includeFireflyFields - Whether to include Firefly III compatible fields
+ * @param debugLogs - Optional array to collect debug messages
  * @returns Promise resolving to array of account summaries
  */
 async function collectAccountSummaries(
@@ -248,19 +249,38 @@ async function collectAccountSummaries(
 	accounts: SEPAAccount[],
 	metadata: FintsRequestMetadata,
 	includeFireflyFields: boolean,
+	debugLogs?: string[],
 ): Promise<AccountSummary[]> {
 	const summaries: AccountSummary[] = [];
 
+	// Helper function to add debug logs only when debugLogs array is provided
+	const addDebugLog = (message: string): void => {
+		if (debugLogs) {
+			debugLogs.push(message);
+		}
+	};
+
 	for (const account of accounts) {
+		const accountId = account.iban || account.accountNumber || 'unknown';
 		try {
+			addDebugLog(`Fetching statements for account ${accountId}...`);
+			context.logger.info(`Fetching statements for account ${accountId}`);
+
 			const statements = await client.statements(account, metadata.startDate, metadata.endDate);
 			summaries.push(
 				toAccountSummary(account, statements, metadata.bankCode, includeFireflyFields),
 			);
+			const summary = toAccountSummary(account, statements, metadata.bankCode);
+			summaries.push(summary);
+
+			const transactionCount = summary.transactions.length;
+			addDebugLog(`Found ${transactionCount} transaction(s) for account ${accountId}`);
+			context.logger.info(`Found ${transactionCount} transaction(s) for account ${accountId}`);
 		} catch (error) {
-			const accountId = account.iban || account.accountNumber || 'unknown';
 			const message = error instanceof Error ? error.message : String(error);
-			context.logger.warn(`Failed to fetch statements for account ${accountId}: ${message}`);
+			const errorMsg = `Failed to fetch statements for account ${accountId}: ${message}`;
+			context.logger.warn(errorMsg);
+			addDebugLog(`⚠️ ${errorMsg}`);
 		}
 	}
 
@@ -553,6 +573,20 @@ export class FintsNode implements INodeType {
 					},
 				},
 			},
+      {
+        displayName: 'Debug Mode',
+				name: 'debugMode',
+				type: 'boolean',
+				default: false,
+				description:
+					'Whether to include detailed debug logs in the output. When enabled, adds a _debug property to each output item with step-by-step execution information.',
+        displayOptions: {
+            show: {
+              resource: ['account'],
+              operation: ['getStatements'],
+            },
+          },
+      }
 		],
 		version: 1,
 	};
@@ -562,19 +596,70 @@ export class FintsNode implements INodeType {
 		const returnData: INodeExecutionData[] = [];
 
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
+			const debugMode = this.getNodeParameter('debugMode', itemIndex, false) as boolean;
+			const debugLogs: string[] = [];
+
+			// Helper function to add debug logs only when debug mode is enabled
+			const addDebugLog = (message: string): void => {
+				if (debugMode) {
+					debugLogs.push(message);
+				}
+			};
+
 			try {
+				addDebugLog('Starting FinTS execution...');
+				this.logger.info(`Starting FinTS execution for item ${itemIndex}`);
+
+				// Build request metadata
+				addDebugLog('Building request metadata...');
 				const metadata = await buildFintsRequestMetadata(this, itemIndex);
 				const includeFireflyFields =
 					(this.getNodeParameter('includeFireflyFields', itemIndex) as boolean) || false;
+				addDebugLog(
+					`Configuration: Bank code ${metadata.bankCode}, Date range: ${metadata.startDate.toISOString().split('T')[0]} to ${metadata.endDate.toISOString().split('T')[0]}`,
+				);
+				this.logger.info(
+					`FinTS request metadata: Bank code ${metadata.bankCode}, Date range: ${metadata.startDate.toISOString()} to ${metadata.endDate.toISOString()}`,
+				);
+
+				// Authenticate and fetch accounts
+				addDebugLog('Authenticating with FinTS server...');
+				this.logger.info('Authenticating with FinTS server');
+
 				const client = new PinTanClient(metadata.config);
+
+				addDebugLog('Fetching accounts...');
+				this.logger.info('Fetching accounts from FinTS server');
+
 				const accounts = await client.accounts();
 
 				if (!accounts.length) {
-					throw new NodeOperationError(
-						this.getNode(),
-						'No accounts found for the provided credentials. Please verify your User ID, PIN, and bank configuration.',
-						{ itemIndex },
-					);
+					const errorMsg =
+						'No accounts found for the provided credentials. Please verify your User ID, PIN, and bank configuration.';
+					addDebugLog(`❌ ${errorMsg}`);
+					this.logger.error(errorMsg);
+					throw new NodeOperationError(this.getNode(), errorMsg, { itemIndex });
+				}
+
+				addDebugLog(`Found ${accounts.length} account(s)`);
+				this.logger.info(`Found ${accounts.length} account(s)`);
+
+				// Collect account summaries
+				const summaries = await collectAccountSummaries(
+					this,
+					client,
+					accounts,
+					metadata,
+					debugMode ? debugLogs : undefined,
+				);
+
+				if (summaries.length === 0) {
+					const warnMsg = 'No account data could be retrieved. All accounts may have failed.';
+					addDebugLog(`⚠️ ${warnMsg}`);
+					this.logger.warn(warnMsg);
+				} else {
+					addDebugLog(`Successfully retrieved data for ${summaries.length} account(s)`);
+					this.logger.info(`Successfully retrieved data for ${summaries.length} account(s)`);
 				}
 
 				const summaries = await collectAccountSummaries(
@@ -585,16 +670,44 @@ export class FintsNode implements INodeType {
 					includeFireflyFields,
 				);
 				returnData.push(...this.helpers.returnJsonArray(summaries));
+				// Prepare output items
+				const outputItems = this.helpers.returnJsonArray(summaries);
+
+				// Attach debug logs if debug mode is enabled
+				if (debugMode) {
+					addDebugLog('Execution completed successfully');
+					outputItems.forEach((item: INodeExecutionData) => {
+						// Create a copy of debug logs for each item to avoid shared references
+						(item.json as IDataObject & { _debug?: string[] })._debug = [...debugLogs];
+					});
+				}
+
+				returnData.push(...outputItems);
 			} catch (error) {
 				if (error instanceof NodeOperationError) {
+					// Already a well-formatted error, just add debug logs if available
+					if (debugMode && debugLogs.length > 0) {
+						const existingMessage = error.message;
+						addDebugLog(`❌ Error: ${existingMessage}`);
+						throw new NodeOperationError(
+							this.getNode(),
+							`${existingMessage}\n\nDebug logs: ${JSON.stringify(debugLogs, null, 2)}`,
+							{ itemIndex },
+						);
+					}
 					throw error;
 				}
 
-				throw new NodeOperationError(
-					this.getNode(),
-					`Error fetching FinTS data: ${error instanceof Error ? error.message : String(error)}`,
-					{ itemIndex },
-				);
+				// Generic error - provide more context
+				const errorMessage = error instanceof Error ? error.message : String(error);
+				addDebugLog(`❌ Unexpected error: ${errorMessage}`);
+				this.logger.error(`Error fetching FinTS data for item ${itemIndex}: ${errorMessage}`);
+
+				const fullErrorMsg = debugMode
+					? `Error fetching FinTS data: ${errorMessage}\n\nDebug logs: ${JSON.stringify(debugLogs, null, 2)}`
+					: `Error fetching FinTS data: ${errorMessage}`;
+
+				throw new NodeOperationError(this.getNode(), fullErrorMsg, { itemIndex });
 			}
 		}
 
