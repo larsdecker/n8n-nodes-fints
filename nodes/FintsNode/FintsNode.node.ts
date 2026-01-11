@@ -570,20 +570,33 @@ export class FintsNode implements INodeType {
 					},
 				},
 			},
-      {
-        displayName: 'Debug Mode',
+			{
+				displayName: 'Debug Mode',
 				name: 'debugMode',
 				type: 'boolean',
 				default: false,
 				description:
 					'Whether to include detailed debug logs in the output. When enabled, adds a _debug property to each output item with step-by-step execution information.',
-        displayOptions: {
-            show: {
-              resource: ['account'],
-              operation: ['getStatements'],
-            },
-          },
-      }
+				displayOptions: {
+					show: {
+						resource: ['account'],
+						operation: ['getStatements'],
+					},
+				},
+			},
+			{
+				displayName: 'Exclude IBANs/Account Numbers',
+				name: 'excludeAccounts',
+				type: 'string',
+				default: '',
+				description: 'Comma-separated list of IBANs or account numbers to exclude from the results',
+				displayOptions: {
+					show: {
+						resource: ['account'],
+						operation: ['getStatements'],
+					},
+				},
+			},
 		],
 		version: 1,
 	};
@@ -641,11 +654,38 @@ export class FintsNode implements INodeType {
 				addDebugLog(`Found ${accounts.length} account(s)`);
 				this.logger.info(`Found ${accounts.length} account(s)`);
 
+				// Filter accounts based on excludeAccounts parameter
+				const excludeAccountsRaw = (this.getNodeParameter('excludeAccounts', itemIndex) as string) || '';
+				const excludeList = excludeAccountsRaw
+					.split(',')
+					.map((s) => s.trim().toUpperCase())
+					.filter((s) => s !== '');
+
+				let filteredAccounts = accounts;
+				if (excludeList.length > 0) {
+					filteredAccounts = accounts.filter((account) => {
+						const iban = (account.iban || '').toUpperCase();
+						const accNo = (account.accountNumber || '').toUpperCase();
+						return !excludeList.includes(iban) && !excludeList.includes(accNo);
+					});
+					addDebugLog(`Filtered to ${filteredAccounts.length} account(s) after exclusions`);
+					this.logger.info(`Filtered to ${filteredAccounts.length} account(s) after exclusions`);
+				}
+
+				// If all accounts were filtered out by the exclusion list, provide a clear error
+				if (excludeList.length > 0 && accounts.length > 0 && filteredAccounts.length === 0) {
+					const msg =
+						'All available accounts were excluded by the "Exclude Accounts" filter. ' +
+						'Please adjust the "Exclude Accounts" parameter so that at least one account remains.';
+					addDebugLog(`⚠️ ${msg}`);
+					this.logger.warn(msg);
+					throw new NodeOperationError(this.getNode(), msg, { itemIndex });
+				}
 				// Collect account summaries
 				const summaries = await collectAccountSummaries(
 					this,
 					client,
-					accounts,
+					filteredAccounts,
 					metadata,
 					includeFireflyFields,
 					debugMode ? debugLogs : undefined,
