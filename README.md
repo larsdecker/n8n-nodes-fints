@@ -130,6 +130,7 @@ This will exclude the account with IBAN `DE89370400440532013000` and the account
 Publishing from CI requires an npm automation token stored as the `NPM_TOKEN` repository secret. Generate the token in the npm account settings, ensure it has automation scope, and add it under **Settings → Secrets and variables → Actions** before pushing release commits or tags. The GitHub Actions workflow validates that the secret is present and aborts with a descriptive error if it is missing.
 
 ## Version history
+- **0.13.0** (2026-01-17): Add `Exclude IBANs/Account Numbers` filter to exclude specific accounts from results; add optional Firefly III field mapping nested under a `firefly` object; introduce debug mode with server-side logging and improved error handling; update tests and documentation; bump dependencies and fix CI/build issues.
 - **0.12.0** (2025-12-27): Update of Dependencies and Security Patches
 - **0.11.0** (2025-12-23): Change the fints dependency to fints-lib, which is a fork and more maintained
 - **0.10.0** (2025-12-18): Upgrade the n8n-workflow Package to the version 2.x and address breaking changes
