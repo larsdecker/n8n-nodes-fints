@@ -12,13 +12,16 @@ async function executeWithDecoupledTan(operation, retryWithDialog, client, logCa
 	} catch (error) {
 		if (error instanceof TanRequiredError && error.isDecoupledTan()) {
 			logCallback?.(`Decoupled TAN challenge received: "${error.challengeText}". Polling for user approval...`);
-			await client.handleDecoupledTanChallenge(error, (status) => {
-				logCallback?.(`Decoupled TAN status: ${status.state} (attempt ${status.statusRequestCount})`);
-			});
-			logCallback?.('Decoupled TAN confirmed. Retrying original request...');
-			const result = await retryWithDialog(error.dialog);
-			await error.dialog.end();
-			return result;
+			try {
+				await client.handleDecoupledTanChallenge(error, (status) => {
+					logCallback?.(`Decoupled TAN status: ${status.state} (attempt ${status.statusRequestCount})`);
+				});
+				logCallback?.('Decoupled TAN confirmed. Retrying original request...');
+				const result = await retryWithDialog(error.dialog);
+				return result;
+			} finally {
+				await error.dialog.end();
+			}
 		}
 		throw error;
 	}
@@ -99,6 +102,34 @@ test('executeWithDecoupledTan handles decoupled TAN and retries with dialog', as
 		logs.some((l) => l.includes('Retrying original request')),
 		'should log retry',
 	);
+});
+
+test('executeWithDecoupledTan ends dialog even when retry fails', async () => {
+	const tanError = makeDecoupledTanError();
+	let dialogEndCalled = false;
+	tanError.dialog.end = async () => {
+		dialogEndCalled = true;
+	};
+
+	const mockClient = {
+		handleDecoupledTanChallenge: async () => {},
+	};
+
+	await assert.rejects(
+		() =>
+			executeWithDecoupledTan(
+				async () => {
+					throw tanError;
+				},
+				async () => {
+					throw new Error('retry failed');
+				},
+				mockClient,
+			),
+		/retry failed/,
+	);
+
+	assert.ok(dialogEndCalled, 'dialog.end() should be called even when retryWithDialog fails');
 });
 
 test('executeWithDecoupledTan propagates DecoupledTanError from polling', async () => {
