@@ -15,6 +15,7 @@ import {
 	type StructuredDescription,
 } from 'fints-lib/';
 import banks from './banks.json';
+import { fetchProductIdFromService, maskProductId } from './productIdService';
 
 // Build dropdown options from banks.json for the UI
 const bankOptions = banks.map((b) => ({ name: b.displayName, value: b.value }));
@@ -74,7 +75,93 @@ interface FintsRequestMetadata {
 	endDate: Date;
 }
 
-type FintsCredentialData = { userId: string; pin: string };
+type FintsCredentialData = {
+	userId: string;
+	pin: string;
+	productRegistrationId?: string;
+	useSharedProductId?: boolean;
+	installationApiKey?: string;
+	productIdServiceUrl?: string;
+	productIdServiceHmacSecret?: string;
+};
+
+/**
+ * Resolves the FinTS product registration ID according to the following priority:
+ * 1. `fintsProductId` node parameter (backward-compatible, highest priority)
+ * 2. `credentials.productRegistrationId` (manual credential field)
+ * 3. `FINTS_PRODUCT_ID` environment variable
+ * 4. Central ID service (when `useSharedProductId` is true or `installationApiKey` is set)
+ *
+ * Returns `undefined` when no product ID is configured.
+ */
+async function resolveProductRegistrationId(
+	context: IExecuteFunctions,
+	credentials: FintsCredentialData,
+	itemIndex: number,
+): Promise<string | undefined> {
+	// 1. Node parameter (existing behaviour – highest priority for backward compatibility)
+	const nodeParamId = (
+		(context.getNodeParameter('fintsProductId', itemIndex) as string) || ''
+	).trim();
+	if (nodeParamId !== '') {
+		return nodeParamId;
+	}
+
+	// 2. Credential field (manual override)
+	const credentialId = (credentials.productRegistrationId || '').trim();
+	if (credentialId !== '') {
+		return credentialId;
+	}
+
+	// 3. Environment variable
+	const envId = (process.env.FINTS_PRODUCT_ID ?? '').trim();
+	if (envId !== '') {
+		return envId;
+	}
+
+	// 4. Central ID service
+	const installationApiKey = (credentials.installationApiKey || '').trim();
+	const useSharedProductId = credentials.useSharedProductId === true;
+
+	if (useSharedProductId || installationApiKey !== '') {
+		if (installationApiKey === '') {
+			throw new NodeOperationError(
+				context.getNode(),
+				'"Use Shared Product ID" is enabled but no installationApiKey is set in credentials.',
+				{ itemIndex },
+			);
+		}
+
+		const serviceUrl = (
+			credentials.productIdServiceUrl ||
+			process.env.FINTS_PRODUCT_ID_SERVICE_URL ||
+			''
+		).trim();
+
+		if (serviceUrl === '') {
+			throw new NodeOperationError(
+				context.getNode(),
+				'No product ID service URL is configured. ' +
+					'Set productIdServiceUrl in credentials or the FINTS_PRODUCT_ID_SERVICE_URL environment variable.',
+				{ itemIndex },
+			);
+		}
+
+		const hmacSecret = (
+			credentials.productIdServiceHmacSecret ||
+			process.env.FINTS_PRODUCT_ID_SERVICE_HMAC_SECRET ||
+			''
+		).trim();
+
+		return await fetchProductIdFromService(context, {
+			installationApiKey,
+			serviceUrl,
+			hmacSecret: hmacSecret !== '' ? hmacSecret : undefined,
+		});
+	}
+
+	return undefined;
+}
 
 /**
  * Builds the metadata required for a FinTS request, including client configuration and date range.
@@ -88,9 +175,8 @@ async function buildFintsRequestMetadata(
 ): Promise<FintsRequestMetadata> {
 	const credentials = await context.getCredentials<FintsCredentialData>('fintsApi', itemIndex);
 	const { blz, fintsUrl } = resolveBankConfiguration(context, itemIndex);
-	const fintsProductId = (
-		(context.getNodeParameter('fintsProductId', itemIndex) as string) || ''
-	).trim();
+
+	const productId = await resolveProductRegistrationId(context, credentials, itemIndex);
 
 	const config: PinTanClientConfig = {
 		url: fintsUrl,
@@ -99,8 +185,9 @@ async function buildFintsRequestMetadata(
 		blz,
 	};
 
-	if (fintsProductId !== '') {
-		config.productId = fintsProductId;
+	if (productId !== undefined && productId !== '') {
+		config.productId = productId;
+		context.logger.info(`Using product registration ID (masked: ${maskProductId(productId)})`);
 	}
 
 	const { startDate, endDate } = resolveDateRange(context, itemIndex);

@@ -119,6 +119,52 @@ DE89370400440532013000, 87654321
 
 This will exclude the account with IBAN `DE89370400440532013000` and the account with account number `87654321` from the results.
 
+### Using a Shared productRegistrationId
+
+Some banks require a FinTS product registration ID (also called a *productId*) to access their FinTS interface. The node supports several ways to supply this ID, evaluated in the following priority order:
+
+1. **Node parameter** – Set `FinTS Registration Number` directly in the node properties *(highest priority, for per-workflow overrides)*.
+2. **Credential field** – Set `FinTS Product Registration ID` in the FinTS credentials *(per-credential override)*.
+3. **Environment variable** `FINTS_PRODUCT_ID` – Useful for self-hosted installations where every workflow should use the same ID.
+4. **Central ID service** – When `Use Shared Product ID` is enabled (or an `Installation API Key` is present in credentials), the node fetches the product ID from a remote service. The result is cached locally in n8n's workflow static data for 7 days.
+
+#### Setting up the shared product ID service
+
+1. Obtain an **Installation API Key** from the plugin author or your organisation's ID service.
+2. Open your FinTS credentials in n8n.
+3. Enable **Use Shared Product ID**.
+4. Paste the key into **Installation API Key**.
+5. Optionally set **Product ID Service URL** if the service URL is not supplied via the `FINTS_PRODUCT_ID_SERVICE_URL` environment variable.
+6. If the service uses HMAC-SHA256 response signing, enter the shared secret in **Product ID Service HMAC Secret** (or set `FINTS_PRODUCT_ID_SERVICE_HMAC_SECRET`).
+
+#### Environment variable reference
+
+| Variable | Description |
+|---|---|
+| `FINTS_PRODUCT_ID` | Static product registration ID (fallback before calling the service) |
+| `FINTS_PRODUCT_ID_SERVICE_URL` | Base URL of the central ID service (e.g. `https://id.example.com`) |
+| `FINTS_PRODUCT_ID_SERVICE_HMAC_SECRET` | HMAC-SHA256 secret for verifying service responses |
+
+#### Docker Compose example
+
+```yaml
+services:
+  n8n:
+    image: n8nio/n8n
+    environment:
+      - FINTS_PRODUCT_ID_SERVICE_URL=https://id.example.com
+      - FINTS_PRODUCT_ID_SERVICE_HMAC_SECRET_FILE=/run/secrets/fints_hmac
+    secrets:
+      - fints_hmac
+secrets:
+  fints_hmac:
+    file: ./secrets/fints_hmac.txt
+```
+
+#### Privacy & liability notice
+
+When using the shared product ID service, the plugin author's identity is visible to your bank as the registrant of the product ID. Bank login credentials (User ID, PIN) are **never** sent to the ID service – only the installation API key is used for authentication with that service. You can revoke your installation API key at any time to stop using the shared ID.
+
 ## Resources
 
 * [n8n community nodes documentation](https://docs.n8n.io/integrations/#community-nodes)
@@ -130,6 +176,7 @@ This will exclude the account with IBAN `DE89370400440532013000` and the account
 Publishing from CI requires an npm automation token stored as the `NPM_TOKEN` repository secret. Generate the token in the npm account settings, ensure it has automation scope, and add it under **Settings → Secrets and variables → Actions** before pushing release commits or tags. The GitHub Actions workflow validates that the secret is present and aborts with a descriptive error if it is missing.
 
 ## Version history
+- **0.14.0** (2026-03-17): Add optional shared productRegistrationId support via a configurable central ID service; new credential fields (installationApiKey, useSharedProductId, productRegistrationId, productIdServiceUrl, productIdServiceHmacSecret); TTL-based cache in workflow static data; HMAC signature verification; ENV variable fallbacks (FINTS_PRODUCT_ID, FINTS_PRODUCT_ID_SERVICE_URL, FINTS_PRODUCT_ID_SERVICE_HMAC_SECRET); unit tests for service fetch logic, caching, error cases; README documentation.
 - **0.13.0** (2026-01-17): Add `Exclude IBANs/Account Numbers` filter to exclude specific accounts from results; add optional Firefly III field mapping nested under a `firefly` object; introduce debug mode with server-side logging and improved error handling; update tests and documentation; bump dependencies and fix CI/build issues.
 - **0.12.0** (2025-12-27): Update of Dependencies and Security Patches
 - **0.11.0** (2025-12-23): Change the fints dependency to fints-lib, which is a fork and more maintained
