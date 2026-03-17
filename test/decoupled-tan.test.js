@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { TanRequiredError, DecoupledTanError, DecoupledTanState } from 'fints-lib/dist/index.js';
+import { TanRequiredError, DecoupledTanError, DecoupledTanState } from 'fints-lib';
 
 /**
  * Inline copy of executeWithDecoupledTan for unit testing without needing to build.
