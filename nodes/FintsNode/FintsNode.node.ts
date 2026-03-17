@@ -522,7 +522,7 @@ export class FintsNode implements INodeType {
 				type: 'string',
 				default: '',
 				description:
-					'The FinTS Product ID to use. Whether this field is required depends on the bank. Please try leaving it empty at first. If you receive an error with code 9050, the bank requires registration for usage.',
+					'Some banks require an official FinTS Product Registration ID to access their FinTS interface. This node does not provide one by default, so leave the field empty first and only set your own registered ID if your bank requires it, for example after error 9050. You can request a Product ID at https://www.fints.org/de/hersteller/produktregistrierung.',
 				displayOptions: {
 					show: {
 						resource: ['account'],

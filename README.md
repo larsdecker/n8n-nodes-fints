@@ -27,6 +27,22 @@ The available banks are defined in `nodes/FintsNode/banks.json`. To support addi
 
 Once you have these details, create new credentials in n8n under **Settings → API Credentials**, select **FinTS**, and enter the above information.
 
+## FinTS Product Registration ID
+
+Some banks require an official FinTS Product Registration ID, also called `productId`, to access their FinTS interface.
+This project does not provide a shared Product ID by default.
+
+If your bank requires one, you are responsible for obtaining and using your own valid ID.
+Using a shared or public ID may fail depending on the bank and can lead to rate limiting or blocking.
+
+You can request an official Product ID via the FinTS registration form:
+
+https://www.fints.org/de/hersteller/produktregistrierung
+
+In this node, the Product ID can be provided through the **FinTS Registration Number** parameter, which maps to the `fintsProductId` field.
+If you are unsure whether your bank requires it, try the node with an empty value first.
+If the request fails with an error such as `9050`, configure your registered Product ID and try again.
+
 ## Compatibility
 
 - Tested with n8n versions **>= 0.150.0**.
