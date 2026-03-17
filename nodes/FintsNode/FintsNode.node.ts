@@ -260,18 +260,29 @@ async function executeWithDecoupledTan<T>(
 		return await operation();
 	} catch (error) {
 		if (error instanceof TanRequiredError && error.isDecoupledTan()) {
+			const dialog = error.dialog;
 			logCallback?.(
 				`Decoupled TAN challenge received: "${error.challengeText}". Polling for user approval...`,
 			);
-			await client.handleDecoupledTanChallenge(error, (status) => {
-				logCallback?.(
-					`Decoupled TAN status: ${status.state} (attempt ${status.statusRequestCount})`,
-				);
-			});
-			logCallback?.('Decoupled TAN confirmed. Retrying original request...');
-			const result = await retryWithDialog(error.dialog);
-			await error.dialog.end();
-			return result;
+			try {
+				await client.handleDecoupledTanChallenge(error, (status) => {
+					logCallback?.(
+						`Decoupled TAN status: ${status.state} (attempt ${status.statusRequestCount})`,
+					);
+				});
+				logCallback?.('Decoupled TAN confirmed. Retrying original request...');
+				return await retryWithDialog(dialog);
+			} finally {
+				if (dialog) {
+					try {
+						await dialog.end();
+					} catch (endError) {
+						logCallback?.(
+							`Failed to end FinTS dialog after decoupled TAN flow: ${String(endError)}`,
+						);
+					}
+				}
+			}
 		}
 		throw error;
 	}
