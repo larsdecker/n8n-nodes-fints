@@ -19,6 +19,7 @@ npm install n8n-nodes-fints
 ## Credentials
 
 To authenticate with your bank's FinTS server, you need:
+
 - **User ID / Login**: Your customer identification number.
 - **PIN**: Your Personal Identification Number.
 
@@ -37,7 +38,7 @@ Using a shared or public ID may fail depending on the bank and can lead to rate 
 
 You can request an official Product ID via the FinTS registration form:
 
-https://www.fints.org/de/hersteller/produktregistrierung
+<https://www.fints.org/de/hersteller/produktregistrierung>
 
 In this node, the Product ID can be provided through the **FinTS Registration Number** parameter, which maps to the `fintsProductId` field.
 If you are unsure whether your bank requires it, try the node with an empty value first.
@@ -61,23 +62,23 @@ If the request fails with an error such as `9050`, configure your registered Pro
 
 ```json
 [
-	{
-		"account": "DEXXXXXXXXXX",
-		"bank": "23445561",
-		"balance": 10001,
-		"currency": "EUR",
-		"transactions": [
-			{
-				"amount": 20,
-				"text": "Some payment",
-				"valueDate": "2025-06-03",
-				"currency": "EUR",
-				"reference": "XYZ",
-				"isCredit": true,
-				"isExpense": false
-			}
-		]
-	}
+ {
+  "account": "DEXXXXXXXXXX",
+  "bank": "23445561",
+  "balance": 10001,
+  "currency": "EUR",
+  "transactions": [
+   {
+    "amount": 20,
+    "text": "Some payment",
+    "valueDate": "2025-06-03",
+    "currency": "EUR",
+    "reference": "XYZ",
+    "isCredit": true,
+    "isExpense": false
+   }
+  ]
+ }
 ]
 ```
 
@@ -87,23 +88,23 @@ When you enable the **Include Firefly III Fields** option, each transaction will
 
 ```json
 {
-	"amount": 20,
-	"text": "Some payment",
-	"valueDate": "2025-06-03",
-	"currency": "EUR",
-	"reference": "XYZ",
-	"isCredit": true,
-	"isExpense": false,
-	"firefly": {
-		"transactionId": "20250603-001",
-		"transactionType": "deposit",
-		"description": "Some payment",
-		"date": "2025-06-03",
-		"sendingAccount": "DE98370400440532013000",
-		"targetAccount": "DEXXXXXXXXXX",
-		"notes": "Customer Ref: ABC123",
-		"endToEndRef": "NOTPROVIDED"
-	}
+ "amount": 20,
+ "text": "Some payment",
+ "valueDate": "2025-06-03",
+ "currency": "EUR",
+ "reference": "XYZ",
+ "isCredit": true,
+ "isExpense": false,
+ "firefly": {
+  "transactionId": "20250603-001",
+  "transactionType": "deposit",
+  "description": "Some payment",
+  "date": "2025-06-03",
+  "sendingAccount": "DE98370400440532013000",
+  "targetAccount": "DEXXXXXXXXXX",
+  "notes": "Customer Ref: ABC123",
+  "endToEndRef": "NOTPROVIDED"
+ }
 }
 ```
 
@@ -123,12 +124,14 @@ When you enable the **Include Firefly III Fields** option, each transaction will
 The **Exclude IBANs/Account Numbers** parameter allows you to filter out specific accounts from the results. This is useful when you have multiple accounts linked to your FinTS login but only want to process a subset of them.
 
 **How to use:**
+
 - Enter a comma-separated list of IBANs or account numbers you want to exclude
 - Matching is case-insensitive
 - Whitespace around entries is automatically trimmed
 - Both full IBANs (e.g., `DE89370400440532013000`) and account numbers (e.g., `12345678`) are supported
 
 **Example:**
+
 ```
 DE89370400440532013000, 87654321
 ```
@@ -137,15 +140,17 @@ This will exclude the account with IBAN `DE89370400440532013000` and the account
 
 ## Resources
 
-* [n8n community nodes documentation](https://docs.n8n.io/integrations/#community-nodes)
-* [German Article - About how to monitor the Bank Account with n8n](https://lars-decker.eu/blog/konto-monitoring) 
-* [FinTS specification overview](https://www.fints.org/)
+- [n8n community nodes documentation](https://docs.n8n.io/integrations/#community-nodes)
+- [German Article - About how to monitor the Bank Account with n8n](https://lars-decker.eu/blog/konto-monitoring)
+- [FinTS specification overview](https://www.fints.org/)
 
 ## Automated releases
 
 Publishing from CI requires an npm automation token stored as the `NPM_TOKEN` repository secret. Generate the token in the npm account settings, ensure it has automation scope, and add it under **Settings → Secrets and variables → Actions** before pushing release commits or tags. The GitHub Actions workflow validates that the secret is present and aborts with a descriptive error if it is missing.
 
 ## Version history
+
+- **0.14.0** (2026-04-15): Bump fints-lib dependency to 0.10.0;
 - **0.13.0** (2026-01-17): Add `Exclude IBANs/Account Numbers` filter to exclude specific accounts from results; add optional Firefly III field mapping nested under a `firefly` object; introduce debug mode with server-side logging and improved error handling; update tests and documentation; bump dependencies and fix CI/build issues.
 - **0.12.0** (2025-12-27): Update of Dependencies and Security Patches
 - **0.11.0** (2025-12-23): Change the fints dependency to fints-lib, which is a fork and more maintained
