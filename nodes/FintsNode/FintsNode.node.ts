@@ -676,7 +676,8 @@ export class FintsNode implements INodeType {
 				const tanWaitTimeout =
 					(this.getNodeParameter('tanWaitTimeout', itemIndex, 300) as number) || 300;
 
-				// Configure decoupled TAN timeout
+				// Configure decoupled TAN timeout so the polling manager respects the user-specified limit.
+				// This is set unconditionally because fints-lib only uses it if a decoupled TAN is triggered.
 				metadata.config.decoupledTanConfig = {
 					totalTimeout: tanWaitTimeout * 1_000,
 				};
@@ -701,16 +702,16 @@ export class FintsNode implements INodeType {
 				let accounts: SEPAAccount[];
 				try {
 					accounts = await client.accounts();
-				} catch (tanError) {
-					if (tanError instanceof TanRequiredError && tanError.isDecoupledTan()) {
+				} catch (accountsError) {
+					if (accountsError instanceof TanRequiredError && accountsError.isDecoupledTan()) {
 						const logFn = (msg: string) => {
 							addDebugLog(msg);
 							this.logger.info(msg);
 						};
-						authenticatedDialog = await waitForDecoupledTan(client, tanError, logFn);
+						authenticatedDialog = await waitForDecoupledTan(client, accountsError, logFn);
 						accounts = await client.accounts(authenticatedDialog);
 					} else {
-						throw tanError;
+						throw accountsError;
 					}
 				}
 
