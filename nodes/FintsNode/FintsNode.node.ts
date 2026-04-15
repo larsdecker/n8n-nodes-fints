@@ -13,6 +13,7 @@ import {
 	type Statement,
 	type Transaction,
 	type StructuredDescription,
+	TanRequiredError,
 } from 'fints-lib/';
 import banks from './banks.json';
 
@@ -233,6 +234,61 @@ function parseDateParameter(
 }
 
 /**
+ * Executes a FinTS operation and transparently handles decoupled TAN (push TAN / AppTAN)
+ * authentication challenges that require polling for user approval on a separate device.
+ *
+ * When a bank uses decoupled TAN (tanProcess="2" per FinTS 3.0 PINTAN), the server sends
+ * a push notification to the user's device. The client must poll the server until the user
+ * approves the request. Once approved, the original operation is retried using the existing
+ * authenticated dialog.
+ *
+ * @param operation - The FinTS operation to execute (e.g. `() => client.accounts()`)
+ * @param retryWithDialog - Callback that retries the operation with the confirmed dialog
+ * @param client - The FinTS client instance used to handle the TAN challenge
+ * @param logCallback - Optional callback to emit log messages during polling
+ * @returns Promise resolving to the operation result
+ * @throws {DecoupledTanError} if the polling times out or is rejected
+ * @throws {TanRequiredError} for non-decoupled TAN challenges (manual TAN entry required)
+ */
+async function executeWithDecoupledTan<T>(
+	operation: () => Promise<T>,
+	retryWithDialog: (dialog: import('fints-lib/').Dialog) => Promise<T>,
+	client: PinTanClient,
+	logCallback?: (message: string) => void,
+): Promise<T> {
+	try {
+		return await operation();
+	} catch (error) {
+		if (error instanceof TanRequiredError && error.isDecoupledTan()) {
+			const dialog = error.dialog;
+			logCallback?.(
+				`Decoupled TAN challenge received: "${error.challengeText}". Polling for user approval...`,
+			);
+			try {
+				await client.handleDecoupledTanChallenge(error, (status) => {
+					logCallback?.(
+						`Decoupled TAN status: ${status.state} (attempt ${status.statusRequestCount})`,
+					);
+				});
+				logCallback?.('Decoupled TAN confirmed. Retrying original request...');
+				return await retryWithDialog(dialog);
+			} finally {
+				if (dialog) {
+					try {
+						await dialog.end();
+					} catch (endError) {
+						logCallback?.(
+							`Failed to end FinTS dialog after decoupled TAN flow: ${String(endError)}`,
+						);
+					}
+				}
+			}
+		}
+		throw error;
+	}
+}
+
+/**
  * Collects account summaries for all provided accounts by fetching their statements.
  * Errors for individual accounts are logged but don't stop processing of other accounts.
  * @param context - The execution context
@@ -262,12 +318,26 @@ async function collectAccountSummaries(
 
 	for (const account of accounts) {
 		const accountId = account.iban || account.accountNumber || 'unknown';
+		const { startDate, endDate } = metadata;
 		try {
 			addDebugLog(`Fetching statements for account ${accountId}...`);
 			context.logger.info(`Fetching statements for account ${accountId}`);
 
-			const statements = await client.statements(account, metadata.startDate, metadata.endDate);
-			const summary = toAccountSummary(account, statements, metadata.bankCode, includeFireflyFields);
+			const statements = await executeWithDecoupledTan(
+				() => client.statements(account, startDate, endDate),
+				(dialog) => client.statements(account, startDate, endDate, dialog),
+				client,
+				(msg) => {
+					addDebugLog(msg);
+					context.logger.info(msg);
+				},
+			);
+			const summary = toAccountSummary(
+				account,
+				statements,
+				metadata.bankCode,
+				includeFireflyFields,
+			);
 			summaries.push(summary);
 
 			const transactionCount = summary.transactions.length;
@@ -641,7 +711,15 @@ export class FintsNode implements INodeType {
 				addDebugLog('Fetching accounts...');
 				this.logger.info('Fetching accounts from FinTS server');
 
-				const accounts = await client.accounts();
+				const accounts = await executeWithDecoupledTan(
+					() => client.accounts(),
+					(dialog) => client.accounts(dialog),
+					client,
+					(msg) => {
+						addDebugLog(msg);
+						this.logger.info(msg);
+					},
+				);
 
 				if (!accounts.length) {
 					const errorMsg =
@@ -655,7 +733,8 @@ export class FintsNode implements INodeType {
 				this.logger.info(`Found ${accounts.length} account(s)`);
 
 				// Filter accounts based on excludeAccounts parameter
-				const excludeAccountsRaw = (this.getNodeParameter('excludeAccounts', itemIndex) as string) || '';
+				const excludeAccountsRaw =
+					(this.getNodeParameter('excludeAccounts', itemIndex) as string) || '';
 				const excludeList = excludeAccountsRaw
 					.split(',')
 					.map((s) => s.trim().toUpperCase())
