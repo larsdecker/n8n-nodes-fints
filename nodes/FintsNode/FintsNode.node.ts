@@ -13,6 +13,8 @@ import {
 	type Statement,
 	type Transaction,
 	type StructuredDescription,
+	TanRequiredError,
+	type Dialog,
 } from 'fints-lib/';
 import banks from './banks.json';
 
@@ -233,6 +235,35 @@ function parseDateParameter(
 }
 
 /**
+ * Polls the bank until the user confirms a decoupled TAN challenge in their banking app,
+ * or until the timeout is exceeded.
+ *
+ * For decoupled TAN (e.g. Sparda "SecureGo plus"), the bank sends a push notification
+ * and expects the client to submit HKTAN with an empty TAN after the user confirms.
+ * `client.handleDecoupledTanChallenge()` handles this polling internally.
+ * On success it returns a Response; the authenticated dialog is `error.dialog`.
+ *
+ * @param client - The PinTanClient instance
+ * @param error - The TanRequiredError thrown by accounts() / dialog.init()
+ * @param logCallback - Optional logger for status messages
+ * @returns The authenticated Dialog, ready for reuse in accounts() and statements()
+ */
+async function waitForDecoupledTan(
+	client: PinTanClient,
+	error: TanRequiredError,
+	logCallback: (msg: string) => void,
+): Promise<Dialog> {
+	logCallback(
+		`Decoupled TAN challenge received: "${error.challengeText}". Waiting for app confirmation...`,
+	);
+	await client.handleDecoupledTanChallenge(error, (status) => {
+		logCallback(`Decoupled TAN status: ${status.state} (attempt ${status.statusRequestCount})`);
+	});
+	logCallback('Decoupled TAN confirmed by user.');
+	return error.dialog;
+}
+
+/**
  * Collects account summaries for all provided accounts by fetching their statements.
  * Errors for individual accounts are logged but don't stop processing of other accounts.
  * @param context - The execution context
@@ -241,6 +272,7 @@ function parseDateParameter(
  * @param metadata - FinTS request metadata including date range
  * @param includeFireflyFields - Whether to include Firefly III compatible fields
  * @param debugLogs - Optional array to collect debug messages
+ * @param authenticatedDialog - Optional pre-authenticated dialog to reuse (avoids re-login per account)
  * @returns Promise resolving to array of account summaries
  */
 async function collectAccountSummaries(
@@ -250,6 +282,7 @@ async function collectAccountSummaries(
 	metadata: FintsRequestMetadata,
 	includeFireflyFields: boolean,
 	debugLogs?: string[],
+	authenticatedDialog?: Dialog,
 ): Promise<AccountSummary[]> {
 	const summaries: AccountSummary[] = [];
 
@@ -266,7 +299,7 @@ async function collectAccountSummaries(
 			addDebugLog(`Fetching statements for account ${accountId}...`);
 			context.logger.info(`Fetching statements for account ${accountId}`);
 
-			const statements = await client.statements(account, metadata.startDate, metadata.endDate);
+			const statements = await client.statements(account, metadata.startDate, metadata.endDate, authenticatedDialog);
 			const summary = toAccountSummary(account, statements, metadata.bankCode, includeFireflyFields);
 			summaries.push(summary);
 
@@ -597,6 +630,21 @@ export class FintsNode implements INodeType {
 					},
 				},
 			},
+			{
+				displayName: 'App TAN Wait Timeout (Seconds)',
+				name: 'tanWaitTimeout',
+				type: 'number',
+				default: 300,
+				description:
+					'Maximum time in seconds to wait for the user to confirm a push notification ' +
+					'in their banking app (decoupled TAN / AppTAN). Relevant for banks like Sparda Bank.',
+				displayOptions: {
+					show: {
+						resource: ['account'],
+						operation: ['getStatements'],
+					},
+				},
+			},
 		],
 		version: 1,
 	};
@@ -625,6 +673,14 @@ export class FintsNode implements INodeType {
 				const metadata = await buildFintsRequestMetadata(this, itemIndex);
 				const includeFireflyFields =
 					(this.getNodeParameter('includeFireflyFields', itemIndex) as boolean) || false;
+				const tanWaitTimeout =
+					(this.getNodeParameter('tanWaitTimeout', itemIndex, 300) as number) || 300;
+
+				// Configure decoupled TAN timeout
+				metadata.config.decoupledTanConfig = {
+					totalTimeout: tanWaitTimeout * 1_000,
+				};
+
 				addDebugLog(
 					`Configuration: Bank code ${metadata.bankCode}, Date range: ${metadata.startDate.toISOString().split('T')[0]} to ${metadata.endDate.toISOString().split('T')[0]}`,
 				);
@@ -641,7 +697,22 @@ export class FintsNode implements INodeType {
 				addDebugLog('Fetching accounts...');
 				this.logger.info('Fetching accounts from FinTS server');
 
-				const accounts = await client.accounts();
+				let authenticatedDialog: Dialog | undefined;
+				let accounts: SEPAAccount[];
+				try {
+					accounts = await client.accounts();
+				} catch (tanError) {
+					if (tanError instanceof TanRequiredError && tanError.isDecoupledTan()) {
+						const logFn = (msg: string) => {
+							addDebugLog(msg);
+							this.logger.info(msg);
+						};
+						authenticatedDialog = await waitForDecoupledTan(client, tanError, logFn);
+						accounts = await client.accounts(authenticatedDialog);
+					} else {
+						throw tanError;
+					}
+				}
 
 				if (!accounts.length) {
 					const errorMsg =
@@ -681,7 +752,7 @@ export class FintsNode implements INodeType {
 					this.logger.warn(msg);
 					throw new NodeOperationError(this.getNode(), msg, { itemIndex });
 				}
-				// Collect account summaries
+				// Collect account summaries, reusing the authenticated dialog when available
 				const summaries = await collectAccountSummaries(
 					this,
 					client,
@@ -689,7 +760,19 @@ export class FintsNode implements INodeType {
 					metadata,
 					includeFireflyFields,
 					debugMode ? debugLogs : undefined,
+					authenticatedDialog,
 				);
+
+				// End the shared authenticated dialog after all operations are complete
+				if (authenticatedDialog) {
+					try {
+						await authenticatedDialog.end();
+					} catch (endError) {
+						this.logger.warn(
+							`Failed to end FinTS dialog after decoupled TAN flow: ${String(endError)}`,
+						);
+					}
+				}
 
 				if (summaries.length === 0) {
 					const warnMsg = 'No account data could be retrieved. All accounts may have failed.';
