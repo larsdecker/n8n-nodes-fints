@@ -39,6 +39,8 @@ const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 const BLZ_PATTERN = /^\d{8}$/;
 
 type BankConfiguration = { blz: string; fintsUrl: string };
+type FintsProtocolMode = '3.0' | '4.x';
+type PreferredHbciVersion = '4.1' | '4.0';
 
 interface FireflyFields extends IDataObject {
 	transactionId?: string;
@@ -75,8 +77,8 @@ interface FintsRequestMetadata {
 	bankCode: string;
 	startDate: Date;
 	endDate: Date;
-	protocolMode: '3.0' | '4.x';
-	preferredHbciVersion: '4.1' | '4.0';
+	protocolMode: FintsProtocolMode;
+	preferredHbciVersion: PreferredHbciVersion;
 }
 
 type FintsCredentialData = { userId: string; pin: string };
@@ -96,16 +98,16 @@ async function buildFintsRequestMetadata(
 	const fintsProductId = (
 		(context.getNodeParameter('fintsProductId', itemIndex) as string) || ''
 	).trim();
-	const selectedProtocolMode = context.getNodeParameter('fintsProtocolMode', itemIndex, '3.0') as
-		| '3.0'
-		| '4.x';
-	const selectedPreferredHbciVersion = context.getNodeParameter(
+	const protocolMode = context.getNodeParameter(
+		'fintsProtocolMode',
+		itemIndex,
+		'3.0',
+	) as FintsProtocolMode;
+	const preferredHbciVersion = context.getNodeParameter(
 		'preferredHbciVersion',
 		itemIndex,
 		'4.1',
-	) as '4.1' | '4.0';
-	const protocolMode = selectedProtocolMode === '4.x' ? '4.x' : '3.0';
-	const preferredHbciVersion = selectedPreferredHbciVersion === '4.0' ? '4.0' : '4.1';
+	) as PreferredHbciVersion;
 
 	const config: PinTanClientConfig = {
 		url: fintsUrl,
@@ -126,6 +128,24 @@ async function buildFintsRequestMetadata(
 		startDate,
 		endDate,
 		protocolMode,
+		preferredHbciVersion,
+	};
+}
+
+function createFinTS4ClientConfig(
+	config: PinTanClientConfig,
+	preferredHbciVersion: PreferredHbciVersion,
+): FinTS4ClientConfig {
+	return {
+		blz: config.blz,
+		name: config.name,
+		pin: config.pin,
+		url: config.url,
+		productId: config.productId,
+		debug: config.debug,
+		timeout: config.timeout,
+		maxRetries: config.maxRetries,
+		retryDelay: config.retryDelay,
 		preferredHbciVersion,
 	};
 }
@@ -323,6 +343,19 @@ async function collectAccountSummaries(
 	includeFireflyFields: boolean,
 	debugLogs?: string[],
 ): Promise<AccountSummary[]> {
+	if (metadata.protocolMode === '4.x' && client instanceof PinTanClient) {
+		throw new NodeOperationError(
+			context.getNode(),
+			'Internal protocol mismatch: FinTS 4.x mode requires a FinTS4Client instance.',
+		);
+	}
+	if (metadata.protocolMode === '3.0' && client instanceof FinTS4Client) {
+		throw new NodeOperationError(
+			context.getNode(),
+			'Internal protocol mismatch: FinTS 3.0 mode requires a PinTanClient instance.',
+		);
+	}
+
 	const summaries: AccountSummary[] = [];
 
 	// Helper function to add debug logs only when debugLogs array is provided
@@ -339,18 +372,21 @@ async function collectAccountSummaries(
 			addDebugLog(`Fetching statements for account ${accountId}...`);
 			context.logger.info(`Fetching statements for account ${accountId}`);
 
-			const statements =
-				metadata.protocolMode === '4.x'
-					? await client.statements(account, startDate, endDate)
-					: await executeWithDecoupledTan(
-							() => (client as PinTanClient).statements(account, startDate, endDate),
-							(dialog) => (client as PinTanClient).statements(account, startDate, endDate, dialog),
-							client as PinTanClient,
-							(msg) => {
-								addDebugLog(msg);
-								context.logger.info(msg);
-							},
-						);
+			let statements: Statement[];
+			if (metadata.protocolMode === '4.x') {
+				statements = await client.statements(account, startDate, endDate);
+			} else {
+				const pinTanClient = client as PinTanClient;
+				statements = await executeWithDecoupledTan(
+					() => pinTanClient.statements(account, startDate, endDate),
+					(dialog) => pinTanClient.statements(account, startDate, endDate, dialog),
+					pinTanClient,
+					(msg) => {
+						addDebugLog(msg);
+						context.logger.info(msg);
+					},
+				);
+			}
 			const summary = toAccountSummary(
 				account,
 				statements,
@@ -776,27 +812,29 @@ export class FintsNode implements INodeType {
 
 				const client =
 					metadata.protocolMode === '4.x'
-						? new FinTS4Client({
-								...(metadata.config as FinTS4ClientConfig),
-								preferredHbciVersion: metadata.preferredHbciVersion,
-							})
+						? new FinTS4Client(
+								createFinTS4ClientConfig(metadata.config, metadata.preferredHbciVersion),
+							)
 						: new PinTanClient(metadata.config);
 
 				addDebugLog('Fetching accounts...');
 				this.logger.info('Fetching accounts from FinTS server');
 
-				const accounts =
-					metadata.protocolMode === '4.x'
-						? await client.accounts()
-						: await executeWithDecoupledTan(
-								() => (client as PinTanClient).accounts(),
-								(dialog) => (client as PinTanClient).accounts(dialog),
-								client as PinTanClient,
-								(msg) => {
-									addDebugLog(msg);
-									this.logger.info(msg);
-								},
-							);
+				let accounts: SEPAAccount[];
+				if (metadata.protocolMode === '4.x') {
+					accounts = await client.accounts();
+				} else {
+					const pinTanClient = client as PinTanClient;
+					accounts = await executeWithDecoupledTan(
+						() => pinTanClient.accounts(),
+						(dialog) => pinTanClient.accounts(dialog),
+						pinTanClient,
+						(msg) => {
+							addDebugLog(msg);
+							this.logger.info(msg);
+						},
+					);
+				}
 
 				if (!accounts.length) {
 					const errorMsg =
