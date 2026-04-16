@@ -782,45 +782,57 @@ export class FintsNode implements INodeType {
 				addDebugLog('Authenticating with FinTS server...');
 				this.logger.info('Authenticating with FinTS server');
 
-				let client: PinTanClient | FinTS4Client;
-				let resolvedProtocol: ResolvedFintsProtocol;
+				// Helper that encapsulates protocol negotiation so it can be unit-tested separately.
+				const resolveFinTSClient = async (
+					protocol: FintsProtocol,
+					config: PinTanClientConfig,
+				): Promise<{
+					client: PinTanClient | FinTS4Client;
+					resolvedProtocol: ResolvedFintsProtocol;
+				}> => {
+					if (protocol === 'auto') {
+						addDebugLog('Protocol set to Auto: probing for FinTS 4.1 support...');
+						this.logger.info('Protocol set to Auto: probing for FinTS 4.1 support');
 
-				if (metadata.protocol === 'auto') {
-					addDebugLog('Protocol set to Auto: probing for FinTS 4.1 support...');
-					this.logger.info('Protocol set to Auto: probing for FinTS 4.1 support');
-					const v4ProbeClient = new FinTS4Client(createFinTS4ClientConfig(metadata.config));
-					try {
-						await v4ProbeClient.capabilities();
-						// v4.1 probe succeeded → bank supports FinTS 4.1
-						resolvedProtocol = '4.1';
-						client = v4ProbeClient;
-						addDebugLog('Auto-detect: FinTS 4.1 is supported, using 4.1');
-						this.logger.info('Auto-detect: FinTS 4.1 is supported by this bank');
-					} catch (probeError) {
-						// Re-throw authentication errors immediately so the user gets a clear PIN error.
-						// Do NOT fall back to 3.0 when the credentials are wrong.
-						if (probeError instanceof PinError || probeError instanceof AuthenticationError) {
-							throw probeError;
+						const v4ProbeClient = new FinTS4Client(createFinTS4ClientConfig(config));
+						try {
+							await v4ProbeClient.capabilities();
+							// v4.1 probe succeeded → bank supports FinTS 4.1
+							addDebugLog('Auto-detect: FinTS 4.1 is supported, using 4.1');
+							this.logger.info('Auto-detect: FinTS 4.1 is supported by this bank');
+							return { client: v4ProbeClient, resolvedProtocol: '4.1' };
+						} catch (probeError) {
+							// Re-throw authentication errors immediately so the user gets a clear PIN error.
+							// Do NOT fall back to 3.0 when the credentials are wrong.
+							if (probeError instanceof PinError || probeError instanceof AuthenticationError) {
+								throw probeError;
+							}
+							// Any other error means the bank does not support FinTS 4.1 → fall back to 3.0
+							const probeReason =
+								probeError instanceof Error ? probeError.message : String(probeError);
+							addDebugLog(
+								`Auto-detect: FinTS 4.1 probe failed (${probeReason}), falling back to FinTS 3.0`,
+							);
+							this.logger.info(
+								`Auto-detect: FinTS 4.1 not supported, falling back to FinTS 3.0. Reason: ${probeReason}`,
+							);
+							return { client: new PinTanClient(config), resolvedProtocol: '3.0' };
 						}
-						// Any other error means the bank does not support FinTS 4.1 → fall back to 3.0
-						const probeReason =
-							probeError instanceof Error ? probeError.message : String(probeError);
-						addDebugLog(
-							`Auto-detect: FinTS 4.1 probe failed (${probeReason}), falling back to FinTS 3.0`,
-						);
-						this.logger.info(
-							`Auto-detect: FinTS 4.1 not supported, falling back to FinTS 3.0. Reason: ${probeReason}`,
-						);
-						resolvedProtocol = '3.0';
-						client = new PinTanClient(metadata.config);
 					}
-				} else {
-					resolvedProtocol = metadata.protocol;
-					client =
-						metadata.protocol === '4.1'
-							? new FinTS4Client(createFinTS4ClientConfig(metadata.config))
-							: new PinTanClient(metadata.config);
-				}
+
+					return {
+						resolvedProtocol: protocol,
+						client:
+							protocol === '4.1'
+								? new FinTS4Client(createFinTS4ClientConfig(config))
+								: new PinTanClient(config),
+					};
+				};
+
+				const { client, resolvedProtocol } = await resolveFinTSClient(
+					metadata.protocol,
+					metadata.config,
+				);
 
 				const resolvedMetadata: ResolvedFintsRequestMetadata = {
 					...metadata,
@@ -942,7 +954,11 @@ export class FintsNode implements INodeType {
 					const pinMsg = `Authentication failed: Incorrect PIN. Please check your PIN in the FinTS credentials configuration.${codeSuffix}`;
 					addDebugLog(`❌ PIN error: ${error.message}`);
 					this.logger.error(`FinTS PIN error for item ${itemIndex}: ${error.message}`);
-					throw new NodeOperationError(this.getNode(), pinMsg, { itemIndex });
+					const fullPinMsg =
+						debugMode && debugLogs.length > 0
+							? `${pinMsg}\n\nDebug logs: ${JSON.stringify(debugLogs, null, 2)}`
+							: pinMsg;
+					throw new NodeOperationError(this.getNode(), fullPinMsg, { itemIndex });
 				}
 
 				// Specific authentication error: other auth failure (e.g. locked account, SCA required)
@@ -951,7 +967,11 @@ export class FintsNode implements INodeType {
 					const authMsg = `Authentication failed: ${error.message}${codeSuffix}`;
 					addDebugLog(`❌ Authentication error: ${error.message}`);
 					this.logger.error(`FinTS authentication error for item ${itemIndex}: ${error.message}`);
-					throw new NodeOperationError(this.getNode(), authMsg, { itemIndex });
+					const fullAuthMsg =
+						debugMode && debugLogs.length > 0
+							? `${authMsg}\n\nDebug logs: ${JSON.stringify(debugLogs, null, 2)}`
+							: authMsg;
+					throw new NodeOperationError(this.getNode(), fullAuthMsg, { itemIndex });
 				}
 
 				// Generic error - provide more context
