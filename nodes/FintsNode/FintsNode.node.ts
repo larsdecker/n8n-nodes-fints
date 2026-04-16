@@ -331,13 +331,13 @@ async function collectAccountSummaries(
 	if (metadata.protocol === '4.1' && client instanceof PinTanClient) {
 		throw new NodeOperationError(
 			context.getNode(),
-			'Internal protocol mismatch: FinTS 4.1 mode requires a FinTS4Client instance.',
+			'Unexpected internal state: FinTS 4.1 mode was selected but a FinTS 3.0 client was created. Please report this as a bug.',
 		);
 	}
 	if (metadata.protocol === '3.0' && client instanceof FinTS4Client) {
 		throw new NodeOperationError(
 			context.getNode(),
-			'Internal protocol mismatch: FinTS 3.0 mode requires a PinTanClient instance.',
+			'Unexpected internal state: FinTS 3.0 mode was selected but a FinTS 4.1 client was created. Please report this as a bug.',
 		);
 	}
 
@@ -579,7 +579,7 @@ export class FintsNode implements INodeType {
 				type: 'options',
 				default: '3.0',
 				description:
-					'Select the FinTS protocol. FinTS 3.0 is stable and widely supported. FinTS 4.1 is experimental and uses the XML-based client.',
+					'Select the FinTS protocol. FinTS 3.0 is stable and compatible with virtually all German banks. FinTS 4.1 is experimental and only supported by a small number of banks.',
 				options: [
 					{
 						name: 'FinTS 3.0 (Stable)',
