@@ -715,13 +715,20 @@ export class FintsNode implements INodeType {
 				const metadata = await buildFintsRequestMetadata(this, itemIndex);
 				const includeFireflyFields =
 					(this.getNodeParameter('includeFireflyFields', itemIndex) as boolean) || false;
-				const tanWaitTimeout =
-					(this.getNodeParameter('tanWaitTimeout', itemIndex, 300) as number) || 300;
+				const tanWaitTimeoutRaw =
+					(this.getNodeParameter('tanWaitTimeout', itemIndex, 300) as number) ?? 300;
+				if (!Number.isFinite(tanWaitTimeoutRaw) || tanWaitTimeoutRaw <= 0) {
+					throw new NodeOperationError(
+						this.getNode(),
+						`"tanWaitTimeout" must be a positive number of seconds, got: ${tanWaitTimeoutRaw}`,
+						{ itemIndex },
+					);
+				}
 
 				// Configure decoupled TAN timeout so the polling manager respects the user-specified limit.
 				// This is set unconditionally because fints-lib only uses it if a decoupled TAN is triggered.
 				metadata.config.decoupledTanConfig = {
-					totalTimeout: tanWaitTimeout * 1_000,
+					totalTimeout: tanWaitTimeoutRaw * 1_000,
 				};
 
 				addDebugLog(
