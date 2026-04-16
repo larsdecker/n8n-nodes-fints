@@ -11,10 +11,14 @@ async function executeWithDecoupledTan(operation, retryWithDialog, client, logCa
 		return await operation();
 	} catch (error) {
 		if (error instanceof TanRequiredError && error.isDecoupledTan()) {
-			logCallback?.(`Decoupled TAN challenge received: "${error.challengeText}". Polling for user approval...`);
+			logCallback?.(
+				`Decoupled TAN challenge received: "${error.challengeText}". Polling for user approval...`,
+			);
 			try {
 				await client.handleDecoupledTanChallenge(error, (status) => {
-					logCallback?.(`Decoupled TAN status: ${status.state} (attempt ${status.statusRequestCount})`);
+					logCallback?.(
+						`Decoupled TAN status: ${status.state} (attempt ${status.statusRequestCount})`,
+					);
 				});
 				logCallback?.('Decoupled TAN confirmed. Retrying original request...');
 				const result = await retryWithDialog(error.dialog);
@@ -197,4 +201,13 @@ test('executeWithDecoupledTan re-throws non-decoupled TanRequiredError', async (
 			return true;
 		},
 	);
+});
+
+test('tanWaitTimeout parameter exists in node description', async () => {
+	const { FintsNode } = await import('../dist/nodes/FintsNode/FintsNode.node.js');
+	const node = new FintsNode();
+	const param = node.description.properties.find((p) => p.name === 'tanWaitTimeout');
+	assert.ok(param, 'tanWaitTimeout parameter should exist');
+	assert.equal(param.type, 'number', 'should be a number parameter');
+	assert.equal(param.default, 300, 'default should be 300 seconds');
 });

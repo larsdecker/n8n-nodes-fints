@@ -667,6 +667,26 @@ export class FintsNode implements INodeType {
 					},
 				},
 			},
+			{
+				displayName: 'App TAN Wait Timeout (Seconds)',
+				name: 'tanWaitTimeout',
+				type: 'number',
+				default: 300,
+				typeOptions: {
+					minValue: 1,
+					maxValue: 3600,
+				},
+				description:
+					'Maximum time in seconds to wait for the user to confirm a push notification ' +
+					'in their banking app (decoupled TAN / AppTAN). Must be between 1 and 3600 seconds. ' +
+					'Relevant for banks like Sparda Bank.',
+				displayOptions: {
+					show: {
+						resource: ['account'],
+						operation: ['getStatements'],
+					},
+				},
+			},
 		],
 		version: 1,
 	};
@@ -695,6 +715,22 @@ export class FintsNode implements INodeType {
 				const metadata = await buildFintsRequestMetadata(this, itemIndex);
 				const includeFireflyFields =
 					(this.getNodeParameter('includeFireflyFields', itemIndex) as boolean) || false;
+				const tanWaitTimeoutRaw =
+					(this.getNodeParameter('tanWaitTimeout', itemIndex, 300) as number) ?? 300;
+				if (!Number.isFinite(tanWaitTimeoutRaw) || tanWaitTimeoutRaw <= 0) {
+					throw new NodeOperationError(
+						this.getNode(),
+						`"tanWaitTimeout" must be a positive number of seconds, got: ${tanWaitTimeoutRaw}`,
+						{ itemIndex },
+					);
+				}
+
+				// Configure decoupled TAN timeout so the polling manager respects the user-specified limit.
+				// This is set unconditionally because fints-lib only uses it if a decoupled TAN is triggered.
+				metadata.config.decoupledTanConfig = {
+					totalTimeout: tanWaitTimeoutRaw * 1_000,
+				};
+
 				addDebugLog(
 					`Configuration: Bank code ${metadata.bankCode}, Date range: ${metadata.startDate.toISOString().split('T')[0]} to ${metadata.endDate.toISOString().split('T')[0]}`,
 				);
