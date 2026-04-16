@@ -39,8 +39,7 @@ const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 const BLZ_PATTERN = /^\d{8}$/;
 
 type BankConfiguration = { blz: string; fintsUrl: string };
-type FintsProtocolMode = '3.0' | '4.x';
-type PreferredHbciVersion = '4.1' | '4.0';
+type FintsProtocol = '3.0' | '4.1';
 
 interface FireflyFields extends IDataObject {
 	transactionId?: string;
@@ -77,8 +76,7 @@ interface FintsRequestMetadata {
 	bankCode: string;
 	startDate: Date;
 	endDate: Date;
-	protocolMode: FintsProtocolMode;
-	preferredHbciVersion: PreferredHbciVersion;
+	protocol: FintsProtocol;
 }
 
 type FintsCredentialData = { userId: string; pin: string };
@@ -98,16 +96,7 @@ async function buildFintsRequestMetadata(
 	const fintsProductId = (
 		(context.getNodeParameter('fintsProductId', itemIndex) as string) || ''
 	).trim();
-	const protocolMode = context.getNodeParameter(
-		'fintsProtocolMode',
-		itemIndex,
-		'3.0',
-	) as FintsProtocolMode;
-	const preferredHbciVersion = context.getNodeParameter(
-		'preferredHbciVersion',
-		itemIndex,
-		'4.1',
-	) as PreferredHbciVersion;
+	const protocolMode = context.getNodeParameter('fintsProtocol', itemIndex, '3.0') as FintsProtocol;
 
 	const config: PinTanClientConfig = {
 		url: fintsUrl,
@@ -127,15 +116,11 @@ async function buildFintsRequestMetadata(
 		bankCode: blz,
 		startDate,
 		endDate,
-		protocolMode,
-		preferredHbciVersion,
+		protocol: protocolMode,
 	};
 }
 
-function createFinTS4ClientConfig(
-	config: PinTanClientConfig,
-	preferredHbciVersion: PreferredHbciVersion,
-): FinTS4ClientConfig {
+function createFinTS4ClientConfig(config: PinTanClientConfig): FinTS4ClientConfig {
 	return {
 		blz: config.blz,
 		name: config.name,
@@ -146,7 +131,7 @@ function createFinTS4ClientConfig(
 		timeout: config.timeout,
 		maxRetries: config.maxRetries,
 		retryDelay: config.retryDelay,
-		preferredHbciVersion,
+		preferredHbciVersion: '4.1',
 	};
 }
 
@@ -343,13 +328,13 @@ async function collectAccountSummaries(
 	includeFireflyFields: boolean,
 	debugLogs?: string[],
 ): Promise<AccountSummary[]> {
-	if (metadata.protocolMode === '4.x' && client instanceof PinTanClient) {
+	if (metadata.protocol === '4.1' && client instanceof PinTanClient) {
 		throw new NodeOperationError(
 			context.getNode(),
-			'Internal protocol mismatch: FinTS 4.x mode requires a FinTS4Client instance.',
+			'Internal protocol mismatch: FinTS 4.1 mode requires a FinTS4Client instance.',
 		);
 	}
-	if (metadata.protocolMode === '3.0' && client instanceof FinTS4Client) {
+	if (metadata.protocol === '3.0' && client instanceof FinTS4Client) {
 		throw new NodeOperationError(
 			context.getNode(),
 			'Internal protocol mismatch: FinTS 3.0 mode requires a PinTanClient instance.',
@@ -373,7 +358,7 @@ async function collectAccountSummaries(
 			context.logger.info(`Fetching statements for account ${accountId}`);
 
 			let statements: Statement[];
-			if (metadata.protocolMode === '4.x') {
+			if (metadata.protocol === '4.1') {
 				statements = await client.statements(account, startDate, endDate);
 			} else {
 				const pinTanClient = client as PinTanClient;
@@ -590,50 +575,25 @@ export class FintsNode implements INodeType {
 			},
 			{
 				displayName: 'FinTS Protocol',
-				name: 'fintsProtocolMode',
+				name: 'fintsProtocol',
 				type: 'options',
 				default: '3.0',
 				description:
-					'Select the FinTS protocol mode. FinTS 3.0 is stable. FinTS 4.x is experimental and uses the XML-based client.',
+					'Select the FinTS protocol. FinTS 3.0 is stable and widely supported. FinTS 4.1 is experimental and uses the XML-based client.',
 				options: [
 					{
 						name: 'FinTS 3.0 (Stable)',
 						value: '3.0',
 					},
 					{
-						name: 'FinTS 4.x (Experimental)',
-						value: '4.x',
-					},
-				],
-				displayOptions: {
-					show: {
-						resource: ['account'],
-						operation: ['getStatements'],
-					},
-				},
-			},
-			{
-				displayName: 'Preferred FinTS 4 HBCI Version',
-				name: 'preferredHbciVersion',
-				type: 'options',
-				default: '4.1',
-				description:
-					'Choose the preferred FinTS 4.x HBCI version. Set to 4.0 if your bank requires it.',
-				options: [
-					{
-						name: '4.1',
+						name: 'FinTS 4.1 (Experimental)',
 						value: '4.1',
 					},
-					{
-						name: '4.0',
-						value: '4.0',
-					},
 				],
 				displayOptions: {
 					show: {
 						resource: ['account'],
 						operation: ['getStatements'],
-						fintsProtocolMode: ['4.x'],
 					},
 				},
 			},
@@ -800,10 +760,10 @@ export class FintsNode implements INodeType {
 				const includeFireflyFields =
 					(this.getNodeParameter('includeFireflyFields', itemIndex) as boolean) || false;
 				addDebugLog(
-					`Configuration: Protocol ${metadata.protocolMode}, Bank code ${metadata.bankCode}, Date range: ${metadata.startDate.toISOString().split('T')[0]} to ${metadata.endDate.toISOString().split('T')[0]}`,
+					`Configuration: Protocol ${metadata.protocol}, Bank code ${metadata.bankCode}, Date range: ${metadata.startDate.toISOString().split('T')[0]} to ${metadata.endDate.toISOString().split('T')[0]}`,
 				);
 				this.logger.info(
-					`FinTS request metadata: Protocol ${metadata.protocolMode}, Bank code ${metadata.bankCode}, Date range: ${metadata.startDate.toISOString()} to ${metadata.endDate.toISOString()}`,
+					`FinTS request metadata: Protocol ${metadata.protocol}, Bank code ${metadata.bankCode}, Date range: ${metadata.startDate.toISOString()} to ${metadata.endDate.toISOString()}`,
 				);
 
 				// Authenticate and fetch accounts
@@ -811,17 +771,15 @@ export class FintsNode implements INodeType {
 				this.logger.info('Authenticating with FinTS server');
 
 				const client =
-					metadata.protocolMode === '4.x'
-						? new FinTS4Client(
-								createFinTS4ClientConfig(metadata.config, metadata.preferredHbciVersion),
-							)
+					metadata.protocol === '4.1'
+						? new FinTS4Client(createFinTS4ClientConfig(metadata.config))
 						: new PinTanClient(metadata.config);
 
 				addDebugLog('Fetching accounts...');
 				this.logger.info('Fetching accounts from FinTS server');
 
 				let accounts: SEPAAccount[];
-				if (metadata.protocolMode === '4.x') {
+				if (metadata.protocol === '4.1') {
 					accounts = await client.accounts();
 				} else {
 					const pinTanClient = client as PinTanClient;

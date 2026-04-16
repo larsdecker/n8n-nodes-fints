@@ -48,7 +48,7 @@ If the request fails with an error such as `9050`, configure your registered Pro
 
 - Tested with n8n versions **>= 0.150.0**.
 - Compatible with FinTS versions **1.1**, **2.2**, and **3.0**.
-- Supports optional FinTS **4.x** mode (experimental) via `fints-lib` with optional preferred HBCI version selection (`4.1` or `4.0`).
+- Supports optional FinTS **4.1** mode (experimental) via `fints-lib`.
 
 ## Usage
 
@@ -56,14 +56,13 @@ If the request fails with an error such as `9050`, configure your registered Pro
 2. **Select** the FinTS credentials you created.
 3. **Choose** the operation: **Get Account Balance**.
 4. **Select** the **FinTS Protocol**:
-   - **FinTS 3.0 (Stable)** for the existing MT940-based flow.
-   - **FinTS 4.x (Experimental)** to use the XML-based flow.
-5. If you selected **FinTS 4.x**, optionally set **Preferred FinTS 4 HBCI Version** to **4.0** when your bank requires it (default is **4.1**).
-6. **Configure** the remaining parameters. The node automatically retrieves all accounts linked to your login.
-7. **Optionally**, set **Start Date** and **End Date** to limit the booking range. If left empty, the node fetches statements from the last 14 days up to today.
-8. **Optionally**, enable **Include Firefly III Fields** to add a nested `firefly` object with fields compatible with Firefly III personal finance software.
-9. **Optionally**, use **Exclude IBANs/Account Numbers** to filter out specific accounts from the results by providing a comma-separated list of IBANs or account numbers to exclude.
-10. **Execute** the workflow to receive a response object containing `balance`,`currency`, `bank`, `account`, and an array of `transactions`.
+   - **FinTS 3.0 (Stable)** for the established MT940-based flow (default, recommended).
+   - **FinTS 4.1 (Experimental)** to use the newer XML-based flow.
+5. **Configure** the remaining parameters. The node automatically retrieves all accounts linked to your login.
+6. **Optionally**, set **Start Date** and **End Date** to limit the booking range. If left empty, the node fetches statements from the last 14 days up to today.
+7. **Optionally**, enable **Include Firefly III Fields** to add a nested `firefly` object with fields compatible with Firefly III personal finance software.
+8. **Optionally**, use **Exclude IBANs/Account Numbers** to filter out specific accounts from the results by providing a comma-separated list of IBANs or account numbers to exclude.
+9. **Execute** the workflow to receive a response object containing `balance`,`currency`, `bank`, `account`, and an array of `transactions`.
 
 ```json
 [
@@ -155,7 +154,7 @@ Publishing from CI requires an npm automation token stored as the `NPM_TOKEN` re
 
 ## Version history
 
-- **Unreleased**: Add optional FinTS 4.x protocol mode and expose preferred FinTS 4 HBCI version switch (`4.1`/`4.0`) in node parameters; bump `fints-lib` to `0.11.0`; add tests for protocol options.
+- **Unreleased**: Add optional FinTS 4.1 protocol mode via a single `fintsProtocol` parameter (`3.0` / `4.1`); bump `fints-lib` to `0.11.0`; add tests for protocol options.
 - **0.14.0** (2026-04-15): Bump fints-lib dependency to 0.10.0;
 - **0.13.0** (2026-01-17): Add `Exclude IBANs/Account Numbers` filter to exclude specific accounts from results; add optional Firefly III field mapping nested under a `firefly` object; introduce debug mode with server-side logging and improved error handling; update tests and documentation; bump dependencies and fix CI/build issues.
 - **0.12.0** (2025-12-27): Update of Dependencies and Security Patches
