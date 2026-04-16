@@ -672,9 +672,14 @@ export class FintsNode implements INodeType {
 				name: 'tanWaitTimeout',
 				type: 'number',
 				default: 300,
+				typeOptions: {
+					minValue: 1,
+					maxValue: 3600,
+				},
 				description:
 					'Maximum time in seconds to wait for the user to confirm a push notification ' +
-					'in their banking app (decoupled TAN / AppTAN). Relevant for banks like Sparda Bank.',
+					'in their banking app (decoupled TAN / AppTAN). Must be between 1 and 3600 seconds. ' +
+					'Relevant for banks like Sparda Bank.',
 				displayOptions: {
 					show: {
 						resource: ['account'],
