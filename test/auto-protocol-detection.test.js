@@ -50,9 +50,10 @@ assert.equal(protocolProp.default, '3.0', "default should remain '3.0' for backw
 
 /**
  * Inline copy of the resolveFinTSClient control-flow logic for unit testing.
- * Mirrors the inner arrow function in FintsNode.node.ts execute().
- * The real implementation closes over addDebugLog/logger; here we accept them as params
- * so tests can assert on logged messages.
+ * Mirrors the inner arrow function in FintsNode.node.ts execute() — keep in sync with
+ * the auto-detection block (especially the PinError/AuthenticationError re-throw guard).
+ * The real implementation closes over addDebugLog/logger; here we accept them as
+ * dependency-injected params so tests can assert on logged messages without I/O.
  */
 async function resolveFinTSClient(
 protocol,

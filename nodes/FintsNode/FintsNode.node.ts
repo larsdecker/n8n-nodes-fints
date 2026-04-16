@@ -783,6 +783,8 @@ export class FintsNode implements INodeType {
 				this.logger.info('Authenticating with FinTS server');
 
 				// Helper that encapsulates protocol negotiation so it can be unit-tested separately.
+				// Auto mode probes FinTS 4.1 via capabilities() and falls back to 3.0 on non-auth errors.
+				// PIN/auth errors during the probe are re-thrown immediately (no silent 3.0 fallback).
 				const resolveFinTSClient = async (
 					protocol: FintsProtocol,
 					config: PinTanClientConfig,
