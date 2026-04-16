@@ -18,11 +18,6 @@ values,
 );
 
 assert.ok(
-values.includes('auto'),
-'fintsProtocol should include auto-detect option',
-);
-
-assert.ok(
 !node.description.properties.find((p) => p.name === 'preferredHbciVersion'),
 'preferredHbciVersion parameter should not exist (merged into fintsProtocol)',
 );

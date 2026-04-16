@@ -938,7 +938,8 @@ export class FintsNode implements INodeType {
 
 				// Specific authentication error: wrong PIN
 				if (error instanceof PinError) {
-					const pinMsg = `Authentication failed: Incorrect PIN. Please check your PIN in the FinTS credentials configuration.${error.code ? ` (Code: ${error.code})` : ''}`;
+					const codeSuffix = error.code ? ` (Code: ${error.code})` : '';
+					const pinMsg = `Authentication failed: Incorrect PIN. Please check your PIN in the FinTS credentials configuration.${codeSuffix}`;
 					addDebugLog(`❌ PIN error: ${error.message}`);
 					this.logger.error(`FinTS PIN error for item ${itemIndex}: ${error.message}`);
 					throw new NodeOperationError(this.getNode(), pinMsg, { itemIndex });
@@ -946,7 +947,8 @@ export class FintsNode implements INodeType {
 
 				// Specific authentication error: other auth failure (e.g. locked account, SCA required)
 				if (error instanceof AuthenticationError) {
-					const authMsg = `Authentication failed: ${error.message}${error.code ? ` (Code: ${error.code})` : ''}`;
+					const codeSuffix = error.code ? ` (Code: ${error.code})` : '';
+					const authMsg = `Authentication failed: ${error.message}${codeSuffix}`;
 					addDebugLog(`❌ Authentication error: ${error.message}`);
 					this.logger.error(`FinTS authentication error for item ${itemIndex}: ${error.message}`);
 					throw new NodeOperationError(this.getNode(), authMsg, { itemIndex });
