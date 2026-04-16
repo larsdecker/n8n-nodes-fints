@@ -7,7 +7,9 @@ import type {
 } from 'n8n-workflow';
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 import {
+	FinTS4Client,
 	PinTanClient,
+	type FinTS4ClientConfig,
 	type PinTanClientConfig,
 	type SEPAAccount,
 	type Statement,
@@ -73,6 +75,8 @@ interface FintsRequestMetadata {
 	bankCode: string;
 	startDate: Date;
 	endDate: Date;
+	protocolMode: '3.0' | '4.x';
+	preferredHbciVersion: '4.1' | '4.0';
 }
 
 type FintsCredentialData = { userId: string; pin: string };
@@ -92,6 +96,16 @@ async function buildFintsRequestMetadata(
 	const fintsProductId = (
 		(context.getNodeParameter('fintsProductId', itemIndex) as string) || ''
 	).trim();
+	const selectedProtocolMode = context.getNodeParameter('fintsProtocolMode', itemIndex, '3.0') as
+		| '3.0'
+		| '4.x';
+	const selectedPreferredHbciVersion = context.getNodeParameter(
+		'preferredHbciVersion',
+		itemIndex,
+		'4.1',
+	) as '4.1' | '4.0';
+	const protocolMode = selectedProtocolMode === '4.x' ? '4.x' : '3.0';
+	const preferredHbciVersion = selectedPreferredHbciVersion === '4.0' ? '4.0' : '4.1';
 
 	const config: PinTanClientConfig = {
 		url: fintsUrl,
@@ -111,6 +125,8 @@ async function buildFintsRequestMetadata(
 		bankCode: blz,
 		startDate,
 		endDate,
+		protocolMode,
+		preferredHbciVersion,
 	};
 }
 
@@ -301,7 +317,7 @@ async function executeWithDecoupledTan<T>(
  */
 async function collectAccountSummaries(
 	context: IExecuteFunctions,
-	client: PinTanClient,
+	client: PinTanClient | FinTS4Client,
 	accounts: SEPAAccount[],
 	metadata: FintsRequestMetadata,
 	includeFireflyFields: boolean,
@@ -323,15 +339,18 @@ async function collectAccountSummaries(
 			addDebugLog(`Fetching statements for account ${accountId}...`);
 			context.logger.info(`Fetching statements for account ${accountId}`);
 
-			const statements = await executeWithDecoupledTan(
-				() => client.statements(account, startDate, endDate),
-				(dialog) => client.statements(account, startDate, endDate, dialog),
-				client,
-				(msg) => {
-					addDebugLog(msg);
-					context.logger.info(msg);
-				},
-			);
+			const statements =
+				metadata.protocolMode === '4.x'
+					? await client.statements(account, startDate, endDate)
+					: await executeWithDecoupledTan(
+							() => (client as PinTanClient).statements(account, startDate, endDate),
+							(dialog) => (client as PinTanClient).statements(account, startDate, endDate, dialog),
+							client as PinTanClient,
+							(msg) => {
+								addDebugLog(msg);
+								context.logger.info(msg);
+							},
+						);
 			const summary = toAccountSummary(
 				account,
 				statements,
@@ -534,6 +553,55 @@ export class FintsNode implements INodeType {
 				],
 			},
 			{
+				displayName: 'FinTS Protocol',
+				name: 'fintsProtocolMode',
+				type: 'options',
+				default: '3.0',
+				description:
+					'Select the FinTS protocol mode. FinTS 3.0 is stable. FinTS 4.x is experimental and uses the XML-based client.',
+				options: [
+					{
+						name: 'FinTS 3.0 (Stable)',
+						value: '3.0',
+					},
+					{
+						name: 'FinTS 4.x (Experimental)',
+						value: '4.x',
+					},
+				],
+				displayOptions: {
+					show: {
+						resource: ['account'],
+						operation: ['getStatements'],
+					},
+				},
+			},
+			{
+				displayName: 'Preferred FinTS 4 HBCI Version',
+				name: 'preferredHbciVersion',
+				type: 'options',
+				default: '4.1',
+				description:
+					'Choose the preferred FinTS 4.x HBCI version. Set to 4.0 if your bank requires it.',
+				options: [
+					{
+						name: '4.1',
+						value: '4.1',
+					},
+					{
+						name: '4.0',
+						value: '4.0',
+					},
+				],
+				displayOptions: {
+					show: {
+						resource: ['account'],
+						operation: ['getStatements'],
+						fintsProtocolMode: ['4.x'],
+					},
+				},
+			},
+			{
 				displayName: 'Select Bank',
 				name: 'bank',
 				type: 'options',
@@ -696,30 +764,39 @@ export class FintsNode implements INodeType {
 				const includeFireflyFields =
 					(this.getNodeParameter('includeFireflyFields', itemIndex) as boolean) || false;
 				addDebugLog(
-					`Configuration: Bank code ${metadata.bankCode}, Date range: ${metadata.startDate.toISOString().split('T')[0]} to ${metadata.endDate.toISOString().split('T')[0]}`,
+					`Configuration: Protocol ${metadata.protocolMode}, Bank code ${metadata.bankCode}, Date range: ${metadata.startDate.toISOString().split('T')[0]} to ${metadata.endDate.toISOString().split('T')[0]}`,
 				);
 				this.logger.info(
-					`FinTS request metadata: Bank code ${metadata.bankCode}, Date range: ${metadata.startDate.toISOString()} to ${metadata.endDate.toISOString()}`,
+					`FinTS request metadata: Protocol ${metadata.protocolMode}, Bank code ${metadata.bankCode}, Date range: ${metadata.startDate.toISOString()} to ${metadata.endDate.toISOString()}`,
 				);
 
 				// Authenticate and fetch accounts
 				addDebugLog('Authenticating with FinTS server...');
 				this.logger.info('Authenticating with FinTS server');
 
-				const client = new PinTanClient(metadata.config);
+				const client =
+					metadata.protocolMode === '4.x'
+						? new FinTS4Client({
+								...(metadata.config as FinTS4ClientConfig),
+								preferredHbciVersion: metadata.preferredHbciVersion,
+							})
+						: new PinTanClient(metadata.config);
 
 				addDebugLog('Fetching accounts...');
 				this.logger.info('Fetching accounts from FinTS server');
 
-				const accounts = await executeWithDecoupledTan(
-					() => client.accounts(),
-					(dialog) => client.accounts(dialog),
-					client,
-					(msg) => {
-						addDebugLog(msg);
-						this.logger.info(msg);
-					},
-				);
+				const accounts =
+					metadata.protocolMode === '4.x'
+						? await client.accounts()
+						: await executeWithDecoupledTan(
+								() => (client as PinTanClient).accounts(),
+								(dialog) => (client as PinTanClient).accounts(dialog),
+								client as PinTanClient,
+								(msg) => {
+									addDebugLog(msg);
+									this.logger.info(msg);
+								},
+							);
 
 				if (!accounts.length) {
 					const errorMsg =
