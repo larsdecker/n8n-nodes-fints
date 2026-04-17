@@ -7,13 +7,17 @@ import type {
 } from 'n8n-workflow';
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 import {
+	FinTS4Client,
 	PinTanClient,
+	type FinTS4ClientConfig,
 	type PinTanClientConfig,
 	type SEPAAccount,
 	type Statement,
 	type Transaction,
 	type StructuredDescription,
 	TanRequiredError,
+	PinError,
+	AuthenticationError,
 } from 'fints-lib/';
 import banks from './banks.json';
 
@@ -37,6 +41,8 @@ const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 const BLZ_PATTERN = /^\d{8}$/;
 
 type BankConfiguration = { blz: string; fintsUrl: string };
+type FintsProtocol = '3.0' | '4.1' | 'auto';
+type ResolvedFintsProtocol = '3.0' | '4.1';
 
 interface FireflyFields extends IDataObject {
 	transactionId?: string;
@@ -73,6 +79,11 @@ interface FintsRequestMetadata {
 	bankCode: string;
 	startDate: Date;
 	endDate: Date;
+	protocol: FintsProtocol;
+}
+
+interface ResolvedFintsRequestMetadata extends Omit<FintsRequestMetadata, 'protocol'> {
+	protocol: ResolvedFintsProtocol;
 }
 
 type FintsCredentialData = { userId: string; pin: string };
@@ -92,6 +103,7 @@ async function buildFintsRequestMetadata(
 	const fintsProductId = (
 		(context.getNodeParameter('fintsProductId', itemIndex) as string) || ''
 	).trim();
+	const protocolMode = context.getNodeParameter('fintsProtocol', itemIndex, '3.0') as FintsProtocol;
 
 	const config: PinTanClientConfig = {
 		url: fintsUrl,
@@ -111,6 +123,22 @@ async function buildFintsRequestMetadata(
 		bankCode: blz,
 		startDate,
 		endDate,
+		protocol: protocolMode,
+	};
+}
+
+function createFinTS4ClientConfig(config: PinTanClientConfig): FinTS4ClientConfig {
+	return {
+		blz: config.blz,
+		name: config.name,
+		pin: config.pin,
+		url: config.url,
+		productId: config.productId,
+		debug: config.debug,
+		timeout: config.timeout,
+		maxRetries: config.maxRetries,
+		retryDelay: config.retryDelay,
+		preferredHbciVersion: '4.1',
 	};
 }
 
@@ -301,12 +329,25 @@ async function executeWithDecoupledTan<T>(
  */
 async function collectAccountSummaries(
 	context: IExecuteFunctions,
-	client: PinTanClient,
+	client: PinTanClient | FinTS4Client,
 	accounts: SEPAAccount[],
-	metadata: FintsRequestMetadata,
+	metadata: ResolvedFintsRequestMetadata,
 	includeFireflyFields: boolean,
 	debugLogs?: string[],
 ): Promise<AccountSummary[]> {
+	if (metadata.protocol === '4.1' && client instanceof PinTanClient) {
+		throw new NodeOperationError(
+			context.getNode(),
+			'Unexpected internal state: FinTS 4.1 mode was selected but a FinTS 3.0 client was created. Please report this as a bug.',
+		);
+	}
+	if (metadata.protocol === '3.0' && client instanceof FinTS4Client) {
+		throw new NodeOperationError(
+			context.getNode(),
+			'Unexpected internal state: FinTS 3.0 mode was selected but a FinTS 4.1 client was created. Please report this as a bug.',
+		);
+	}
+
 	const summaries: AccountSummary[] = [];
 
 	// Helper function to add debug logs only when debugLogs array is provided
@@ -323,15 +364,21 @@ async function collectAccountSummaries(
 			addDebugLog(`Fetching statements for account ${accountId}...`);
 			context.logger.info(`Fetching statements for account ${accountId}`);
 
-			const statements = await executeWithDecoupledTan(
-				() => client.statements(account, startDate, endDate),
-				(dialog) => client.statements(account, startDate, endDate, dialog),
-				client,
-				(msg) => {
-					addDebugLog(msg);
-					context.logger.info(msg);
-				},
-			);
+			let statements: Statement[];
+			if (metadata.protocol === '4.1') {
+				statements = await client.statements(account, startDate, endDate);
+			} else {
+				const pinTanClient = client as PinTanClient;
+				statements = await executeWithDecoupledTan(
+					() => pinTanClient.statements(account, startDate, endDate),
+					(dialog) => pinTanClient.statements(account, startDate, endDate, dialog),
+					pinTanClient,
+					(msg) => {
+						addDebugLog(msg);
+						context.logger.info(msg);
+					},
+				);
+			}
 			const summary = toAccountSummary(
 				account,
 				statements,
@@ -534,6 +581,34 @@ export class FintsNode implements INodeType {
 				],
 			},
 			{
+				displayName: 'FinTS Protocol',
+				name: 'fintsProtocol',
+				type: 'options',
+				default: '3.0',
+				description:
+					'Select the FinTS protocol. "Auto-Detect" probes for FinTS 4.1 first and falls back to 3.0. FinTS 3.0 is stable and compatible with virtually all German banks. FinTS 4.1 is experimental and only supported by a small number of banks.',
+				options: [
+					{
+						name: 'FinTS 3.0 (Stable)',
+						value: '3.0',
+					},
+					{
+						name: 'FinTS 4.1 (Experimental)',
+						value: '4.1',
+					},
+					{
+						name: 'Auto-Detect (Prefers 4.1, Falls Back to 3.0)',
+						value: 'auto',
+					},
+				],
+				displayOptions: {
+					show: {
+						resource: ['account'],
+						operation: ['getStatements'],
+					},
+				},
+			},
+			{
 				displayName: 'Select Bank',
 				name: 'bank',
 				type: 'options',
@@ -732,30 +807,94 @@ export class FintsNode implements INodeType {
 				};
 
 				addDebugLog(
-					`Configuration: Bank code ${metadata.bankCode}, Date range: ${metadata.startDate.toISOString().split('T')[0]} to ${metadata.endDate.toISOString().split('T')[0]}`,
+					`Configuration: Protocol ${metadata.protocol}, Bank code ${metadata.bankCode}, Date range: ${metadata.startDate.toISOString().split('T')[0]} to ${metadata.endDate.toISOString().split('T')[0]}`,
 				);
 				this.logger.info(
-					`FinTS request metadata: Bank code ${metadata.bankCode}, Date range: ${metadata.startDate.toISOString()} to ${metadata.endDate.toISOString()}`,
+					`FinTS request metadata: Protocol ${metadata.protocol} (${metadata.protocol === 'auto' ? 'will probe 4.1 then fall back to 3.0' : 'fixed'}), Bank code ${metadata.bankCode}, Date range: ${metadata.startDate.toISOString()} to ${metadata.endDate.toISOString()}`,
 				);
 
-				// Authenticate and fetch accounts
+				// Resolve the protocol: 'auto' probes for FinTS 4.1 first and falls back to 3.0.
+				// PIN errors during the probe are NOT swallowed - they propagate immediately.
 				addDebugLog('Authenticating with FinTS server...');
 				this.logger.info('Authenticating with FinTS server');
 
-				const client = new PinTanClient(metadata.config);
+				// Helper that encapsulates protocol negotiation so it can be unit-tested separately.
+				// Auto mode probes FinTS 4.1 via capabilities() and falls back to 3.0 on non-auth errors.
+				// PIN/auth errors during the probe are re-thrown immediately (no silent 3.0 fallback).
+				const resolveFinTSClient = async (
+					protocol: FintsProtocol,
+					config: PinTanClientConfig,
+				): Promise<{
+					client: PinTanClient | FinTS4Client;
+					resolvedProtocol: ResolvedFintsProtocol;
+				}> => {
+					if (protocol === 'auto') {
+						addDebugLog('Protocol set to Auto: probing for FinTS 4.1 support...');
+						this.logger.info('Protocol set to Auto: probing for FinTS 4.1 support');
+
+						const v4ProbeClient = new FinTS4Client(createFinTS4ClientConfig(config));
+						try {
+							await v4ProbeClient.capabilities();
+							// v4.1 probe succeeded → bank supports FinTS 4.1
+							addDebugLog('Auto-detect: FinTS 4.1 is supported, using 4.1');
+							this.logger.info('Auto-detect: FinTS 4.1 is supported by this bank');
+							return { client: v4ProbeClient, resolvedProtocol: '4.1' };
+						} catch (probeError) {
+							// Re-throw authentication errors immediately so the user gets a clear PIN error.
+							// Do NOT fall back to 3.0 when the credentials are wrong.
+							if (probeError instanceof PinError || probeError instanceof AuthenticationError) {
+								throw probeError;
+							}
+							// Any other error means the bank does not support FinTS 4.1 → fall back to 3.0
+							const probeReason =
+								probeError instanceof Error ? probeError.message : String(probeError);
+							addDebugLog(
+								`Auto-detect: FinTS 4.1 probe failed (${probeReason}), falling back to FinTS 3.0`,
+							);
+							this.logger.info(
+								`Auto-detect: FinTS 4.1 not supported, falling back to FinTS 3.0. Reason: ${probeReason}`,
+							);
+							return { client: new PinTanClient(config), resolvedProtocol: '3.0' };
+						}
+					}
+
+					return {
+						resolvedProtocol: protocol,
+						client:
+							protocol === '4.1'
+								? new FinTS4Client(createFinTS4ClientConfig(config))
+								: new PinTanClient(config),
+					};
+				};
+
+				const { client, resolvedProtocol } = await resolveFinTSClient(
+					metadata.protocol,
+					metadata.config,
+				);
+
+				const resolvedMetadata: ResolvedFintsRequestMetadata = {
+					...metadata,
+					protocol: resolvedProtocol,
+				};
 
 				addDebugLog('Fetching accounts...');
 				this.logger.info('Fetching accounts from FinTS server');
 
-				const accounts = await executeWithDecoupledTan(
-					() => client.accounts(),
-					(dialog) => client.accounts(dialog),
-					client,
-					(msg) => {
-						addDebugLog(msg);
-						this.logger.info(msg);
-					},
-				);
+				let accounts: SEPAAccount[];
+				if (resolvedProtocol === '4.1') {
+					accounts = await client.accounts();
+				} else {
+					const pinTanClient = client as PinTanClient;
+					accounts = await executeWithDecoupledTan(
+						() => pinTanClient.accounts(),
+						(dialog) => pinTanClient.accounts(dialog),
+						pinTanClient,
+						(msg) => {
+							addDebugLog(msg);
+							this.logger.info(msg);
+						},
+					);
+				}
 
 				if (!accounts.length) {
 					const errorMsg =
@@ -765,8 +904,12 @@ export class FintsNode implements INodeType {
 					throw new NodeOperationError(this.getNode(), errorMsg, { itemIndex });
 				}
 
-				addDebugLog(`Found ${accounts.length} account(s)`);
-				this.logger.info(`Found ${accounts.length} account(s)`);
+				addDebugLog(
+					`Found ${accounts.length} account(s) via FinTS ${resolvedProtocol}${
+						metadata.protocol === 'auto' ? ' (auto-detected)' : ''
+					}`,
+				);
+				this.logger.info(`Found ${accounts.length} account(s) via FinTS ${resolvedProtocol}`);
 
 				// Filter accounts based on excludeAccounts parameter
 				const excludeAccountsRaw =
@@ -801,7 +944,7 @@ export class FintsNode implements INodeType {
 					this,
 					client,
 					filteredAccounts,
-					metadata,
+					resolvedMetadata,
 					includeFireflyFields,
 					debugMode ? debugLogs : undefined,
 				);
@@ -841,6 +984,32 @@ export class FintsNode implements INodeType {
 						);
 					}
 					throw error;
+				}
+
+				// Specific authentication error: wrong PIN
+				if (error instanceof PinError) {
+					const codeSuffix = error.code ? ` (Code: ${error.code})` : '';
+					const pinMsg = `Authentication failed: Incorrect PIN. Please check your PIN in the FinTS credentials configuration.${codeSuffix}`;
+					addDebugLog(`❌ PIN error: ${error.message}`);
+					this.logger.error(`FinTS PIN error for item ${itemIndex}: ${error.message}`);
+					const fullPinMsg =
+						debugMode && debugLogs.length > 0
+							? `${pinMsg}\n\nDebug logs: ${JSON.stringify(debugLogs, null, 2)}`
+							: pinMsg;
+					throw new NodeOperationError(this.getNode(), fullPinMsg, { itemIndex });
+				}
+
+				// Specific authentication error: other auth failure (e.g. locked account, SCA required)
+				if (error instanceof AuthenticationError) {
+					const codeSuffix = error.code ? ` (Code: ${error.code})` : '';
+					const authMsg = `Authentication failed: ${error.message}${codeSuffix}`;
+					addDebugLog(`❌ Authentication error: ${error.message}`);
+					this.logger.error(`FinTS authentication error for item ${itemIndex}: ${error.message}`);
+					const fullAuthMsg =
+						debugMode && debugLogs.length > 0
+							? `${authMsg}\n\nDebug logs: ${JSON.stringify(debugLogs, null, 2)}`
+							: authMsg;
+					throw new NodeOperationError(this.getNode(), fullAuthMsg, { itemIndex });
 				}
 
 				// Generic error - provide more context

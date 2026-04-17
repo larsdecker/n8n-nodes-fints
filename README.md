@@ -48,37 +48,42 @@ If the request fails with an error such as `9050`, configure your registered Pro
 
 - Tested with n8n versions **>= 0.150.0**.
 - Compatible with FinTS versions **1.1**, **2.2**, and **3.0**.
+- Supports optional FinTS **4.1** mode (experimental) and automatic protocol **Auto-Detect** via `fints-lib`.
 
 ## Usage
 
 1. **Add** the **FinTS** node to your workflow.
 2. **Select** the FinTS credentials you created.
 3. **Choose** the operation: **Get Account Balance**.
-4. **Configure** the parameters. The node automatically retrieves all accounts linked to your login.
-5. **Optionally**, set **Start Date** and **End Date** to limit the booking range. If left empty, the node fetches statements from the last 14 days up to today.
-6. **Optionally**, enable **Include Firefly III Fields** to add a nested `firefly` object with fields compatible with Firefly III personal finance software.
-7. **Optionally**, use **Exclude IBANs/Account Numbers** to filter out specific accounts from the results by providing a comma-separated list of IBANs or account numbers to exclude.
-8. **Execute** the workflow to receive a response object containing `balance`,`currency`, `bank`, `account`, and an array of `transactions`.
+4. **Select** the **FinTS Protocol**:
+   - **FinTS 3.0 (Stable)** for the established MT940-based flow (default, recommended).
+   - **FinTS 4.1 (Experimental)** to use the newer XML-based flow.
+   - **Auto-Detect (Prefers 4.1, Falls Back to 3.0)** — the node probes whether your bank supports FinTS 4.1 and automatically uses it if available, otherwise falls back to FinTS 3.0. If your PIN is incorrect the node reports it immediately without attempting the 3.0 fallback.
+5. **Configure** the remaining parameters. The node automatically retrieves all accounts linked to your login.
+6. **Optionally**, set **Start Date** and **End Date** to limit the booking range. If left empty, the node fetches statements from the last 14 days up to today.
+7. **Optionally**, enable **Include Firefly III Fields** to add a nested `firefly` object with fields compatible with Firefly III personal finance software.
+8. **Optionally**, use **Exclude IBANs/Account Numbers** to filter out specific accounts from the results by providing a comma-separated list of IBANs or account numbers to exclude.
+9. **Execute** the workflow to receive a response object containing `balance`,`currency`, `bank`, `account`, and an array of `transactions`.
 
 ```json
 [
- {
-  "account": "DEXXXXXXXXXX",
-  "bank": "23445561",
-  "balance": 10001,
-  "currency": "EUR",
-  "transactions": [
-   {
-    "amount": 20,
-    "text": "Some payment",
-    "valueDate": "2025-06-03",
-    "currency": "EUR",
-    "reference": "XYZ",
-    "isCredit": true,
-    "isExpense": false
-   }
-  ]
- }
+	{
+		"account": "DEXXXXXXXXXX",
+		"bank": "23445561",
+		"balance": 10001,
+		"currency": "EUR",
+		"transactions": [
+			{
+				"amount": 20,
+				"text": "Some payment",
+				"valueDate": "2025-06-03",
+				"currency": "EUR",
+				"reference": "XYZ",
+				"isCredit": true,
+				"isExpense": false
+			}
+		]
+	}
 ]
 ```
 
@@ -88,23 +93,23 @@ When you enable the **Include Firefly III Fields** option, each transaction will
 
 ```json
 {
- "amount": 20,
- "text": "Some payment",
- "valueDate": "2025-06-03",
- "currency": "EUR",
- "reference": "XYZ",
- "isCredit": true,
- "isExpense": false,
- "firefly": {
-  "transactionId": "20250603-001",
-  "transactionType": "deposit",
-  "description": "Some payment",
-  "date": "2025-06-03",
-  "sendingAccount": "DE98370400440532013000",
-  "targetAccount": "DEXXXXXXXXXX",
-  "notes": "Customer Ref: ABC123",
-  "endToEndRef": "NOTPROVIDED"
- }
+	"amount": 20,
+	"text": "Some payment",
+	"valueDate": "2025-06-03",
+	"currency": "EUR",
+	"reference": "XYZ",
+	"isCredit": true,
+	"isExpense": false,
+	"firefly": {
+		"transactionId": "20250603-001",
+		"transactionType": "deposit",
+		"description": "Some payment",
+		"date": "2025-06-03",
+		"sendingAccount": "DE98370400440532013000",
+		"targetAccount": "DEXXXXXXXXXX",
+		"notes": "Customer Ref: ABC123",
+		"endToEndRef": "NOTPROVIDED"
+	}
 }
 ```
 
@@ -150,6 +155,7 @@ Publishing from CI requires an npm automation token stored as the `NPM_TOKEN` re
 
 ## Version history
 
+- **Unreleased**: Add optional FinTS 4.1 protocol mode and `Auto-Detect` option via a single `fintsProtocol` parameter (`3.0` / `4.1` / `auto`); auto-detect probes 4.1 first and falls back to 3.0, with immediate PIN error propagation (no silent fallback on wrong PIN); add distinct `PinError`/`AuthenticationError` handling in the catch block for clearer user-facing error messages; bump `fints-lib` to `0.11.0`; add tests for protocol options and auth error types.
 - **0.14.0** (2026-04-15): Bump fints-lib dependency to 0.10.0;
 - **0.13.0** (2026-01-17): Add `Exclude IBANs/Account Numbers` filter to exclude specific accounts from results; add optional Firefly III field mapping nested under a `firefly` object; introduce debug mode with server-side logging and improved error handling; update tests and documentation; bump dependencies and fix CI/build issues.
 - **0.12.0** (2025-12-27): Update of Dependencies and Security Patches
