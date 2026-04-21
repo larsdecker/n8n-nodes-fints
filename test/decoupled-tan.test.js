@@ -6,26 +6,22 @@ import { TanRequiredError, DecoupledTanError, DecoupledTanState } from 'fints-li
  * Inline copy of executeWithDecoupledTan for unit testing without needing to build.
  * Mirrors the logic in FintsNode.node.ts.
  */
-async function executeWithDecoupledTan(operation, retryWithDialog, client, logCallback) {
+async function executeWithDecoupledTan(operation, logCallback) {
 	try {
-		return await operation();
+		return { result: await operation() };
 	} catch (error) {
 		if (error instanceof TanRequiredError && error.isDecoupledTan()) {
+			const dialog = error.dialog;
 			logCallback?.(
 				`Decoupled TAN challenge received: "${error.challengeText}". Polling for user approval...`,
 			);
-			try {
-				await client.handleDecoupledTanChallenge(error, (status) => {
-					logCallback?.(
-						`Decoupled TAN status: ${status.state} (attempt ${status.statusRequestCount})`,
-					);
-				});
-				logCallback?.('Decoupled TAN confirmed. Retrying original request...');
-				const result = await retryWithDialog(error.dialog);
-				return result;
-			} finally {
-				await error.dialog.end();
-			}
+			await dialog.handleDecoupledTan(error.transactionReference, error.challengeText, (status) => {
+				logCallback?.(
+					`Decoupled TAN status: ${status.state} (attempt ${status.statusRequestCount})`,
+				);
+			});
+			logCallback?.('Decoupled TAN confirmed. Retrying original request...');
+			return { result: await operation(dialog), dialog };
 		}
 		throw error;
 	}
@@ -34,6 +30,7 @@ async function executeWithDecoupledTan(operation, retryWithDialog, client, logCa
 function makeDecoupledTanError() {
 	const mockDialog = {
 		end: async () => {},
+		handleDecoupledTan: async () => {},
 	};
 	const error = new TanRequiredError(
 		'TAN required',
@@ -47,12 +44,8 @@ function makeDecoupledTanError() {
 }
 
 test('executeWithDecoupledTan returns result when operation succeeds', async () => {
-	const result = await executeWithDecoupledTan(
-		async () => ['account1', 'account2'],
-		async () => [],
-		{},
-	);
-	assert.deepEqual(result, ['account1', 'account2']);
+	const result = await executeWithDecoupledTan(async () => ['account1', 'account2']);
+	assert.deepEqual(result.result, ['account1', 'account2']);
 });
 
 test('executeWithDecoupledTan re-throws non-TAN errors', async () => {
@@ -62,8 +55,6 @@ test('executeWithDecoupledTan re-throws non-TAN errors', async () => {
 				async () => {
 					throw new Error('network failure');
 				},
-				async () => [],
-				{},
 			),
 		/network failure/,
 	);
@@ -72,32 +63,28 @@ test('executeWithDecoupledTan re-throws non-TAN errors', async () => {
 test('executeWithDecoupledTan handles decoupled TAN and retries with dialog', async () => {
 	const tanError = makeDecoupledTanError();
 	const logs = [];
-	let dialogEndCalled = false;
-	tanError.dialog.end = async () => {
-		dialogEndCalled = true;
-	};
-
-	const mockClient = {
-		handleDecoupledTanChallenge: async () => {},
+	let handleDecoupledTanCalled = false;
+	tanError.dialog.handleDecoupledTan = async () => {
+		handleDecoupledTanCalled = true;
 	};
 
 	let operationCallCount = 0;
 	const result = await executeWithDecoupledTan(
-		async () => {
-			operationCallCount++;
-			throw tanError;
-		},
 		async (dialog) => {
+			operationCallCount++;
+			if (!dialog) {
+				throw tanError;
+			}
 			assert.strictEqual(dialog, tanError.dialog, 'retry should receive the error dialog');
 			return ['retried-account'];
 		},
-		mockClient,
 		(msg) => logs.push(msg),
 	);
 
-	assert.deepEqual(result, ['retried-account']);
+	assert.deepEqual(result.result, ['retried-account']);
+	assert.strictEqual(result.dialog, tanError.dialog, 'should expose the reused dialog');
 	assert.equal(operationCallCount, 1, 'operation should be called once');
-	assert.ok(dialogEndCalled, 'dialog.end() should be called after retry');
+	assert.ok(handleDecoupledTanCalled, 'dialog.handleDecoupledTan() should be called');
 	assert.ok(
 		logs.some((l) => l.includes('Decoupled TAN challenge received')),
 		'should log challenge received',
@@ -108,32 +95,22 @@ test('executeWithDecoupledTan handles decoupled TAN and retries with dialog', as
 	);
 });
 
-test('executeWithDecoupledTan ends dialog even when retry fails', async () => {
+test('executeWithDecoupledTan propagates retry errors', async () => {
 	const tanError = makeDecoupledTanError();
-	let dialogEndCalled = false;
-	tanError.dialog.end = async () => {
-		dialogEndCalled = true;
-	};
-
-	const mockClient = {
-		handleDecoupledTanChallenge: async () => {},
-	};
+	tanError.dialog.handleDecoupledTan = async () => {};
 
 	await assert.rejects(
 		() =>
 			executeWithDecoupledTan(
-				async () => {
-					throw tanError;
-				},
-				async () => {
+				async (dialog) => {
+					if (!dialog) {
+						throw tanError;
+					}
 					throw new Error('retry failed');
 				},
-				mockClient,
 			),
 		/retry failed/,
 	);
-
-	assert.ok(dialogEndCalled, 'dialog.end() should be called even when retryWithDialog fails');
 });
 
 test('executeWithDecoupledTan propagates DecoupledTanError from polling', async () => {
@@ -150,20 +127,19 @@ test('executeWithDecoupledTan propagates DecoupledTanError from polling', async 
 
 	const decoupledError = new DecoupledTanError('Timed out', mockStatus);
 
-	const mockClient = {
-		handleDecoupledTanChallenge: async () => {
-			throw decoupledError;
-		},
+	tanError.dialog.handleDecoupledTan = async () => {
+		throw decoupledError;
 	};
 
 	await assert.rejects(
 		() =>
 			executeWithDecoupledTan(
-				async () => {
-					throw tanError;
+				async (dialog) => {
+					if (!dialog) {
+						throw tanError;
+					}
+					return [];
 				},
-				async () => [],
-				mockClient,
 			),
 		(err) => {
 			assert.strictEqual(err, decoupledError, 'should propagate the original DecoupledTanError');
@@ -183,18 +159,12 @@ test('executeWithDecoupledTan re-throws non-decoupled TanRequiredError', async (
 	);
 	// Not decoupled: decoupledTanState is undefined
 
-	const mockClient = {
-		handleDecoupledTanChallenge: async () => {},
-	};
-
 	await assert.rejects(
 		() =>
 			executeWithDecoupledTan(
 				async () => {
 					throw regularTanError;
 				},
-				async () => [],
-				mockClient,
 			),
 		(err) => {
 			assert.strictEqual(err, regularTanError, 'should re-throw the original TanRequiredError');

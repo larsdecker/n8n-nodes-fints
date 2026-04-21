@@ -155,7 +155,7 @@ Publishing from CI requires an npm automation token stored as the `NPM_TOKEN` re
 
 ## Version history
 
-- **Unreleased**: Add optional FinTS 4.1 protocol mode and `Auto-Detect` option via a single `fintsProtocol` parameter (`3.0` / `4.1` / `auto`); auto-detect probes 4.1 first and falls back to 3.0, with immediate PIN error propagation (no silent fallback on wrong PIN); add distinct `PinError`/`AuthenticationError` handling in the catch block for clearer user-facing error messages; bump `fints-lib` to `0.11.0`; add tests for protocol options and auth error types.
+- **Unreleased**: Improve decoupled TAN handling by reusing one authenticated FinTS 3.0 dialog across `accounts()` and `statements()` calls (prevents triggering a new app push/TAN per request), and handle decoupled TAN confirmation via `dialog.handleDecoupledTan(...)` when raised from dialog initialization; bump `fints-lib` to `0.12.0`.
 - **0.14.0** (2026-04-15): Bump fints-lib dependency to 0.10.0;
 - **0.13.0** (2026-01-17): Add `Exclude IBANs/Account Numbers` filter to exclude specific accounts from results; add optional Firefly III field mapping nested under a `firefly` object; introduce debug mode with server-side logging and improved error handling; update tests and documentation; bump dependencies and fix CI/build issues.
 - **0.12.0** (2025-12-27): Update of Dependencies and Security Patches

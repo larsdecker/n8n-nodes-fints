@@ -9,6 +9,7 @@ import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 import {
 	FinTS4Client,
 	PinTanClient,
+	type Dialog,
 	type FinTS4ClientConfig,
 	type PinTanClientConfig,
 	type SEPAAccount,
@@ -279,38 +280,30 @@ function parseDateParameter(
  * @throws {TanRequiredError} for non-decoupled TAN challenges (manual TAN entry required)
  */
 async function executeWithDecoupledTan<T>(
-	operation: () => Promise<T>,
-	retryWithDialog: (dialog: import('fints-lib/').Dialog) => Promise<T>,
-	client: PinTanClient,
+	operation: (dialog?: Dialog) => Promise<T>,
 	logCallback?: (message: string) => void,
-): Promise<T> {
+): Promise<{ result: T; dialog?: Dialog }> {
 	try {
-		return await operation();
+		return { result: await operation() };
 	} catch (error) {
 		if (error instanceof TanRequiredError && error.isDecoupledTan()) {
 			const dialog = error.dialog;
 			logCallback?.(
 				`Decoupled TAN challenge received: "${error.challengeText}". Polling for user approval...`,
 			);
-			try {
-				await client.handleDecoupledTanChallenge(error, (status) => {
+			// Keep this at dialog level so we can re-use the same authenticated dialog
+			// across accounts() and subsequent statements() requests in this execution.
+			await dialog.handleDecoupledTan(
+				error.transactionReference,
+				error.challengeText,
+				(status) => {
 					logCallback?.(
 						`Decoupled TAN status: ${status.state} (attempt ${status.statusRequestCount})`,
 					);
-				});
-				logCallback?.('Decoupled TAN confirmed. Retrying original request...');
-				return await retryWithDialog(dialog);
-			} finally {
-				if (dialog) {
-					try {
-						await dialog.end();
-					} catch (endError) {
-						logCallback?.(
-							`Failed to end FinTS dialog after decoupled TAN flow: ${String(endError)}`,
-						);
-					}
-				}
-			}
+				},
+			);
+			logCallback?.('Decoupled TAN confirmed. Retrying original request...');
+			return { result: await operation(dialog), dialog };
 		}
 		throw error;
 	}
@@ -334,7 +327,8 @@ async function collectAccountSummaries(
 	metadata: ResolvedFintsRequestMetadata,
 	includeFireflyFields: boolean,
 	debugLogs?: string[],
-): Promise<AccountSummary[]> {
+	existingDialog?: Dialog,
+): Promise<{ summaries: AccountSummary[]; dialog?: Dialog }> {
 	if (metadata.protocol === '4.1' && client instanceof PinTanClient) {
 		throw new NodeOperationError(
 			context.getNode(),
@@ -349,6 +343,7 @@ async function collectAccountSummaries(
 	}
 
 	const summaries: AccountSummary[] = [];
+	let sharedDialog = existingDialog;
 
 	// Helper function to add debug logs only when debugLogs array is provided
 	const addDebugLog = (message: string): void => {
@@ -369,15 +364,17 @@ async function collectAccountSummaries(
 				statements = await client.statements(account, startDate, endDate);
 			} else {
 				const pinTanClient = client as PinTanClient;
-				statements = await executeWithDecoupledTan(
-					() => pinTanClient.statements(account, startDate, endDate),
-					(dialog) => pinTanClient.statements(account, startDate, endDate, dialog),
-					pinTanClient,
+				const statementResult = await executeWithDecoupledTan(
+					(dialog) => pinTanClient.statements(account, startDate, endDate, dialog ?? sharedDialog),
 					(msg) => {
 						addDebugLog(msg);
 						context.logger.info(msg);
 					},
 				);
+				if (statementResult.dialog) {
+					sharedDialog = statementResult.dialog;
+				}
+				statements = statementResult.result;
 			}
 			const summary = toAccountSummary(
 				account,
@@ -398,7 +395,7 @@ async function collectAccountSummaries(
 		}
 	}
 
-	return summaries;
+	return { summaries, dialog: sharedDialog };
 }
 
 /**
@@ -773,6 +770,7 @@ export class FintsNode implements INodeType {
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
 			const debugMode = this.getNodeParameter('debugMode', itemIndex, false) as boolean;
 			const debugLogs: string[] = [];
+			let sharedDialog: Dialog | undefined;
 
 			// Helper function to add debug logs only when debug mode is enabled
 			const addDebugLog = (message: string): void => {
@@ -885,15 +883,17 @@ export class FintsNode implements INodeType {
 					accounts = await client.accounts();
 				} else {
 					const pinTanClient = client as PinTanClient;
-					accounts = await executeWithDecoupledTan(
-						() => pinTanClient.accounts(),
-						(dialog) => pinTanClient.accounts(dialog),
-						pinTanClient,
+					const accountsResult = await executeWithDecoupledTan(
+						(dialog) => pinTanClient.accounts(dialog ?? sharedDialog),
 						(msg) => {
 							addDebugLog(msg);
 							this.logger.info(msg);
 						},
 					);
+					if (accountsResult.dialog) {
+						sharedDialog = accountsResult.dialog;
+					}
+					accounts = accountsResult.result;
 				}
 
 				if (!accounts.length) {
@@ -940,14 +940,17 @@ export class FintsNode implements INodeType {
 					throw new NodeOperationError(this.getNode(), msg, { itemIndex });
 				}
 				// Collect account summaries
-				const summaries = await collectAccountSummaries(
+				const accountSummaryResult = await collectAccountSummaries(
 					this,
 					client,
 					filteredAccounts,
 					resolvedMetadata,
 					includeFireflyFields,
 					debugMode ? debugLogs : undefined,
+					sharedDialog,
 				);
+				sharedDialog = accountSummaryResult.dialog ?? sharedDialog;
+				const { summaries } = accountSummaryResult;
 
 				if (summaries.length === 0) {
 					const warnMsg = 'No account data could be retrieved. All accounts may have failed.';
@@ -1022,6 +1025,16 @@ export class FintsNode implements INodeType {
 					: `Error fetching FinTS data: ${errorMessage}`;
 
 				throw new NodeOperationError(this.getNode(), fullErrorMsg, { itemIndex });
+			} finally {
+				if (sharedDialog) {
+					try {
+						await sharedDialog.end();
+					} catch (endError) {
+						this.logger.warn(
+							`Failed to end shared FinTS dialog for item ${itemIndex}: ${String(endError)}`,
+						);
+					}
+				}
 			}
 		}
 

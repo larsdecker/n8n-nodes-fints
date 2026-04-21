@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Improved FinTS 3.0 decoupled TAN flow to reuse one authenticated dialog across `accounts()` and `statements()` requests in a single execution item, preventing repeated push/TAN prompts.
+- Decoupled TAN confirmation now uses `dialog.handleDecoupledTan(...)` when the TAN challenge is raised during dialog initialization, including support for return-code combinations like `3955` + `HITAN`.
+
+### Dependencies
+
+- Bumped `fints-lib` from `0.11.0` to `0.12.0`.
+
 ## [0.15.0] - 2026-04-17
 
 ### Added
