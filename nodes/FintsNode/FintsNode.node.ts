@@ -293,15 +293,11 @@ async function executeWithDecoupledTan<T>(
 			);
 			// Keep this at dialog level so we can re-use the same authenticated dialog
 			// across accounts() and subsequent statements() requests in this execution.
-			await dialog.handleDecoupledTan(
-				error.transactionReference,
-				error.challengeText,
-				(status) => {
-					logCallback?.(
-						`Decoupled TAN status: ${status.state} (attempt ${status.statusRequestCount})`,
-					);
-				},
-			);
+			await dialog.handleDecoupledTan(error.transactionReference, error.challengeText, (status) => {
+				logCallback?.(
+					`Decoupled TAN status: ${status.state} (attempt ${status.statusRequestCount})`,
+				);
+			});
 			logCallback?.('Decoupled TAN confirmed. Retrying original request...');
 			return { result: await operation(dialog), dialog };
 		}

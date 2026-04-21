@@ -83,7 +83,7 @@ test('executeWithDecoupledTan handles decoupled TAN and retries with dialog', as
 
 	assert.deepEqual(result.result, ['retried-account']);
 	assert.strictEqual(result.dialog, tanError.dialog, 'should expose the reused dialog');
-	assert.equal(operationCallCount, 1, 'operation should be called once');
+	assert.equal(operationCallCount, 2, 'operation should be called twice (initial + retry)');
 	assert.ok(handleDecoupledTanCalled, 'dialog.handleDecoupledTan() should be called');
 	assert.ok(
 		logs.some((l) => l.includes('Decoupled TAN challenge received')),
