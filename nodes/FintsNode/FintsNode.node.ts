@@ -291,7 +291,7 @@ async function executeWithDecoupledTan<T>(
 			logCallback?.(
 				`Decoupled TAN challenge received: "${error.challengeText}". Polling for user approval...`,
 			);
-			// Keep this at dialog level so we can re-use the same authenticated dialog
+			// Keep this at dialog level so we can reuse the same authenticated dialog
 			// across accounts() and subsequent statements() requests in this execution.
 			await dialog.handleDecoupledTan(error.transactionReference, error.challengeText, (status) => {
 				logCallback?.(
