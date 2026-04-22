@@ -9,16 +9,20 @@ import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 import {
 	FinTS4Client,
 	PinTanClient,
+	type Dialog,
 	type FinTS4ClientConfig,
 	type PinTanClientConfig,
 	type SEPAAccount,
 	type Statement,
 	type Transaction,
 	type StructuredDescription,
+	type TanMethod,
 	TanRequiredError,
+	DecoupledTanState,
 	PinError,
 	AuthenticationError,
 } from 'fints-lib/';
+import { HITAN } from 'fints-lib/dist/segments/hitan';
 import banks from './banks.json';
 
 // Build dropdown options from banks.json for the UI
@@ -262,6 +266,143 @@ function parseDateParameter(
 }
 
 /**
+ * Some banks (e.g. Sparda with SpardaSecure) send return code 0030 for a push-TAN
+ * without the SCA indicator codes 3956/3076 that fints-lib uses to set
+ * decoupledTanState. The TAN method itself is the authoritative indicator:
+ * tanProcess="2" or decoupledMaxStatusRequests defined means decoupled flow.
+ */
+function hasDecoupledTanMethod(tanMethods: TanMethod[]): boolean {
+	return tanMethods.some(
+		(m) => m.decoupledMaxStatusRequests !== undefined || m.tanProcess === '2',
+	);
+}
+
+/**
+ * Creates and fully authenticates a FinTS 3.0 dialog ready for use with accounts/statements.
+ *
+ * Handles two distinct decoupled TAN scenarios at init time:
+ *
+ * 1. Standard 0030 flow: `dialog.init()` throws `TanRequiredError` when the bank responds
+ *    with return code 0030 alongside 3956/3076 or a decoupled TAN method. The error carries
+ *    the transaction reference from HITAN. We poll until the user confirms in the app, then
+ *    return the now-authenticated dialog (no re-init needed).
+ *
+ * 2. Sparda Bank (3955) flow: `dialog.init()` returns *successfully* with return code 3955
+ *    ("Sicherheitsfreigabe erfolgt über anderen Kanal") + HITAN, but *without* 0030. The
+ *    library treats 3xxx codes as warnings and returns normally, which would let HKSPA/HKKAZ
+ *    fire before the push is confirmed and fail with 9050/9800. We detect the HITAN segment
+ *    in the init response and poll before any further request is sent.
+ *
+ * Sharing the authenticated dialog across all subsequent accounts() and statements() calls
+ * avoids triggering a new push notification per request (which would happen if each call
+ * did its own sync+init).
+ */
+async function initFinTs3Dialog(
+	client: PinTanClient,
+	logCallback?: (msg: string) => void,
+): Promise<Dialog> {
+	const dialog = client.createDialog();
+	await dialog.sync();
+
+	let initResponse: import('fints-lib/').Response;
+	try {
+		initResponse = await dialog.init();
+	} catch (error) {
+		if (error instanceof TanRequiredError) {
+			const isDecoupled =
+				error.isDecoupledTan() ||
+				(error.dialog?.tanMethods?.length > 0 &&
+					hasDecoupledTanMethod(error.dialog.tanMethods));
+			if (isDecoupled) {
+				if (!error.isDecoupledTan()) {
+					error.decoupledTanState = DecoupledTanState.INITIATED;
+				}
+				logCallback?.(
+					`Decoupled TAN challenge in init (0030): "${error.challengeText}". Polling for app confirmation...`,
+				);
+				await error.dialog.handleDecoupledTan(
+					error.transactionReference,
+					error.challengeText,
+					(status) => {
+						logCallback?.(
+							`Decoupled TAN status: ${status.state} (attempt ${status.statusRequestCount})`,
+						);
+					},
+				);
+				logCallback?.('Decoupled TAN confirmed. Proceeding...');
+				return error.dialog;
+			}
+		}
+		throw error;
+	}
+
+	// Sparda Bank scenario: init returned 3955 + HITAN without 0030.
+	// 3955 = "Sicherheitsfreigabe erfolgt über anderen Kanal" (approval via other channel).
+	// 3956 = SCA pending (standard indicator, may also appear without 0030 at some banks).
+	const rvMap = initResponse.returnValues();
+	const hitan = initResponse.findSegment(HITAN);
+
+	if (hitan?.transactionReference && (rvMap.has('3955') || rvMap.has('3956'))) {
+		const code = rvMap.has('3956') ? '3956' : '3955';
+		const challengeText = hitan.challengeText ?? '';
+		logCallback?.(
+			`Decoupled TAN challenge in init response (code ${code}): "${challengeText}". Polling for app confirmation...`,
+		);
+		await dialog.handleDecoupledTan(hitan.transactionReference, challengeText, (status) => {
+			logCallback?.(
+				`Decoupled TAN status: ${status.state} (attempt ${status.statusRequestCount})`,
+			);
+		});
+		logCallback?.('Decoupled TAN confirmed. Proceeding...');
+	}
+
+	return dialog;
+}
+
+/**
+ * Calls `fn` using an existing session dialog and transparently handles a decoupled TAN
+ * challenge (return code 0030) if the server requires one for that specific request.
+ * Unlike `executeWithDecoupledTan`, this function does not manage the dialog lifecycle —
+ * the caller owns the dialog and is responsible for ending it.
+ */
+async function withDecoupledTan<T>(
+	dialog: Dialog,
+	fn: () => Promise<T>,
+	logCallback?: (msg: string) => void,
+): Promise<T> {
+	try {
+		return await fn();
+	} catch (error) {
+		if (error instanceof TanRequiredError) {
+			const isDecoupled =
+				error.isDecoupledTan() ||
+				(error.dialog?.tanMethods?.length > 0 &&
+					hasDecoupledTanMethod(error.dialog.tanMethods));
+			if (isDecoupled) {
+				if (!error.isDecoupledTan()) {
+					error.decoupledTanState = DecoupledTanState.INITIATED;
+				}
+				logCallback?.(
+					`Decoupled TAN challenge (0030): "${error.challengeText}". Polling for app confirmation...`,
+				);
+				await dialog.handleDecoupledTan(
+					error.transactionReference,
+					error.challengeText,
+					(status) => {
+						logCallback?.(
+							`Decoupled TAN status: ${status.state} (attempt ${status.statusRequestCount})`,
+						);
+					},
+				);
+				logCallback?.('Decoupled TAN confirmed. Retrying request...');
+				return await fn();
+			}
+		}
+		throw error;
+	}
+}
+
+/**
  * Executes a FinTS operation and transparently handles decoupled TAN (push TAN / AppTAN)
  * authentication challenges that require polling for user approval on a separate device.
  *
@@ -334,6 +475,7 @@ async function collectAccountSummaries(
 	metadata: ResolvedFintsRequestMetadata,
 	includeFireflyFields: boolean,
 	debugLogs?: string[],
+	existingDialog?: Dialog,
 ): Promise<AccountSummary[]> {
 	if (metadata.protocol === '4.1' && client instanceof PinTanClient) {
 		throw new NodeOperationError(
@@ -369,15 +511,28 @@ async function collectAccountSummaries(
 				statements = await client.statements(account, startDate, endDate);
 			} else {
 				const pinTanClient = client as PinTanClient;
-				statements = await executeWithDecoupledTan(
-					() => pinTanClient.statements(account, startDate, endDate),
-					(dialog) => pinTanClient.statements(account, startDate, endDate, dialog),
-					pinTanClient,
-					(msg) => {
-						addDebugLog(msg);
-						context.logger.info(msg);
-					},
-				);
+				if (existingDialog) {
+					// Reuse the authenticated session dialog — avoids a new sync+init per account
+					// which would trigger a new push notification on banks like Sparda.
+					statements = await withDecoupledTan(
+						existingDialog,
+						() => pinTanClient.statements(account, startDate, endDate, existingDialog),
+						(msg) => {
+							addDebugLog(msg);
+							context.logger.info(msg);
+						},
+					);
+				} else {
+					statements = await executeWithDecoupledTan(
+						() => pinTanClient.statements(account, startDate, endDate),
+						(dialog) => pinTanClient.statements(account, startDate, endDate, dialog),
+						pinTanClient,
+						(msg) => {
+							addDebugLog(msg);
+							context.logger.info(msg);
+						},
+					);
+				}
 			}
 			const summary = toAccountSummary(
 				account,
@@ -774,6 +929,11 @@ export class FintsNode implements INodeType {
 			const debugMode = this.getNodeParameter('debugMode', itemIndex, false) as boolean;
 			const debugLogs: string[] = [];
 
+			// For FinTS 3.0, one dialog is shared across accounts + all statement fetches to avoid
+			// triggering a new push notification per request (e.g. Sparda Bank). Declared outside
+			// the try block so it can be ended in the finally clause even when an error occurs.
+			let sessionDialog: Dialog | undefined;
+
 			// Helper function to add debug logs only when debug mode is enabled
 			const addDebugLog = (message: string): void => {
 				if (debugMode) {
@@ -885,14 +1045,18 @@ export class FintsNode implements INodeType {
 					accounts = await client.accounts();
 				} else {
 					const pinTanClient = client as PinTanClient;
-					accounts = await executeWithDecoupledTan(
-						() => pinTanClient.accounts(),
-						(dialog) => pinTanClient.accounts(dialog),
-						pinTanClient,
-						(msg) => {
-							addDebugLog(msg);
-							this.logger.info(msg);
-						},
+					const sessionLogCallback = (msg: string) => {
+						addDebugLog(msg);
+						this.logger.info(msg);
+					};
+					// One dialog for the entire session: handles 3955+HITAN (Sparda) and
+					// standard 0030 at init time. Reusing the dialog for all subsequent
+					// accounts/statements requests avoids triggering multiple push notifications.
+					sessionDialog = await initFinTs3Dialog(pinTanClient, sessionLogCallback);
+					accounts = await withDecoupledTan(
+						sessionDialog,
+						() => pinTanClient.accounts(sessionDialog!),
+						sessionLogCallback,
 					);
 				}
 
@@ -939,7 +1103,8 @@ export class FintsNode implements INodeType {
 					this.logger.warn(msg);
 					throw new NodeOperationError(this.getNode(), msg, { itemIndex });
 				}
-				// Collect account summaries
+				// Collect account summaries, passing the session dialog for FinTS 3.0 so that
+				// statement fetches reuse the same authenticated session (no re-init per account).
 				const summaries = await collectAccountSummaries(
 					this,
 					client,
@@ -947,6 +1112,7 @@ export class FintsNode implements INodeType {
 					resolvedMetadata,
 					includeFireflyFields,
 					debugMode ? debugLogs : undefined,
+					sessionDialog,
 				);
 
 				if (summaries.length === 0) {
@@ -1022,6 +1188,12 @@ export class FintsNode implements INodeType {
 					: `Error fetching FinTS data: ${errorMessage}`;
 
 				throw new NodeOperationError(this.getNode(), fullErrorMsg, { itemIndex });
+			} finally {
+				if (sessionDialog) {
+					await sessionDialog.end().catch((endErr: unknown) => {
+						this.logger.warn(`Failed to end FinTS session dialog: ${String(endErr)}`);
+					});
+				}
 			}
 		}
 
