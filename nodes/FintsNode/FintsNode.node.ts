@@ -21,6 +21,9 @@ import {
 	DecoupledTanState,
 	PinError,
 	AuthenticationError,
+	ResponseError,
+	HIRMG,
+	HIRMS,
 } from 'fints-lib/';
 import { HITAN } from 'fints-lib/dist/segments/hitan';
 import banks from './banks.json';
@@ -277,6 +280,21 @@ function hasDecoupledTanMethod(tanMethods: TanMethod[]): boolean {
 	);
 }
 
+export function formatFinTSError(error: unknown): string {
+	if (error instanceof ResponseError) {
+		const response = error.response;
+		const returnValues = [
+			...response.findSegments(HIRMG).flatMap((segment) => Array.from(segment.returnValues.values())),
+			...response.findSegments(HIRMS).flatMap((segment) => Array.from(segment.returnValues.values())),
+		].map(({ code, message }) => `[${code}] ${message}`);
+		if (returnValues.length > 0) {
+			return returnValues.join('; ');
+		}
+	}
+
+	return error instanceof Error ? error.message : String(error);
+}
+
 /**
  * Creates and fully authenticates a FinTS 3.0 dialog ready for use with accounts/statements.
  *
@@ -491,6 +509,7 @@ async function collectAccountSummaries(
 	}
 
 	const summaries: AccountSummary[] = [];
+	const failures: string[] = [];
 
 	// Helper function to add debug logs only when debugLogs array is provided
 	const addDebugLog = (message: string): void => {
@@ -546,11 +565,19 @@ async function collectAccountSummaries(
 			addDebugLog(`Found ${transactionCount} transaction(s) for account ${accountId}`);
 			context.logger.info(`Found ${transactionCount} transaction(s) for account ${accountId}`);
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
+			const message = formatFinTSError(error);
 			const errorMsg = `Failed to fetch statements for account ${accountId}: ${message}`;
+			failures.push(errorMsg);
 			context.logger.warn(errorMsg);
 			addDebugLog(`⚠️ ${errorMsg}`);
 		}
+	}
+
+	if (summaries.length === 0 && failures.length > 0) {
+		throw new NodeOperationError(
+			context.getNode(),
+			`No account data could be retrieved. All accounts may have failed.\n\n${failures.join('\n')}`,
+		);
 	}
 
 	return summaries;
@@ -1179,7 +1206,7 @@ export class FintsNode implements INodeType {
 				}
 
 				// Generic error - provide more context
-				const errorMessage = error instanceof Error ? error.message : String(error);
+				const errorMessage = formatFinTSError(error);
 				addDebugLog(`❌ Unexpected error: ${errorMessage}`);
 				this.logger.error(`Error fetching FinTS data for item ${itemIndex}: ${errorMessage}`);
 
