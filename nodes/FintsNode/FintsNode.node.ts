@@ -22,6 +22,8 @@ import {
 	PinError,
 	AuthenticationError,
 	ResponseError,
+	HIRMG,
+	HIRMS,
 } from 'fints-lib/';
 import { HITAN } from 'fints-lib/dist/segments/hitan';
 import banks from './banks.json';
@@ -273,14 +275,18 @@ function parseDateParameter(
  * tanProcess="2" or decoupledMaxStatusRequests defined means decoupled flow.
  */
 function hasDecoupledTanMethod(tanMethods: TanMethod[]): boolean {
-	return tanMethods.some((m) => m.decoupledMaxStatusRequests !== undefined || m.tanProcess === '2');
+	return tanMethods.some(
+		(m) => m.decoupledMaxStatusRequests !== undefined || m.tanProcess === '2',
+	);
 }
 
 export function formatFinTSError(error: unknown): string {
 	if (error instanceof ResponseError) {
-		const returnValues = Array.from(error.response.returnValues().values()).map(
-			({ code, message }) => `[${code}] ${message}`,
-		);
+		const response = error.response;
+		const returnValues = [
+			...response.findSegments(HIRMG).flatMap((segment) => Array.from(segment.returnValues.values())),
+			...response.findSegments(HIRMS).flatMap((segment) => Array.from(segment.returnValues.values())),
+		].map(({ code, message }) => `[${code}] ${message}`);
 		if (returnValues.length > 0) {
 			return returnValues.join('; ');
 		}
@@ -323,7 +329,8 @@ async function initFinTs3Dialog(
 		if (error instanceof TanRequiredError) {
 			const isDecoupled =
 				error.isDecoupledTan() ||
-				(error.dialog?.tanMethods?.length > 0 && hasDecoupledTanMethod(error.dialog.tanMethods));
+				(error.dialog?.tanMethods?.length > 0 &&
+					hasDecoupledTanMethod(error.dialog.tanMethods));
 			if (isDecoupled) {
 				if (!error.isDecoupledTan()) {
 					error.decoupledTanState = DecoupledTanState.INITIATED;
@@ -360,7 +367,9 @@ async function initFinTs3Dialog(
 			`Decoupled TAN challenge in init response (code ${code}): "${challengeText}". Polling for app confirmation...`,
 		);
 		await dialog.handleDecoupledTan(hitan.transactionReference, challengeText, (status) => {
-			logCallback?.(`Decoupled TAN status: ${status.state} (attempt ${status.statusRequestCount})`);
+			logCallback?.(
+				`Decoupled TAN status: ${status.state} (attempt ${status.statusRequestCount})`,
+			);
 		});
 		logCallback?.('Decoupled TAN confirmed. Proceeding...');
 	}
@@ -385,7 +394,8 @@ async function withDecoupledTan<T>(
 		if (error instanceof TanRequiredError) {
 			const isDecoupled =
 				error.isDecoupledTan() ||
-				(error.dialog?.tanMethods?.length > 0 && hasDecoupledTanMethod(error.dialog.tanMethods));
+				(error.dialog?.tanMethods?.length > 0 &&
+					hasDecoupledTanMethod(error.dialog.tanMethods));
 			if (isDecoupled) {
 				if (!error.isDecoupledTan()) {
 					error.decoupledTanState = DecoupledTanState.INITIATED;
